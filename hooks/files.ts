@@ -1,0 +1,152 @@
+// The explorer's I/O: folder listings, the preview's file, and the live refresh.
+import type { EngineInterface } from 'claude-code'
+import type { Entry, Explorer, Preview } from '../types'
+import { MAX_PREVIEW_BYTES, emptyPreview, previewOf, sortEntries, touchedEntries, visibleEntries } from './explorer-state'
+import { bases, fetchBase, gitStatusOf, opened } from './git'
+import { kindOf } from './media'
+import { joinPath, parentOf, relTo } from './paths'
+import { loadPicture } from './picture'
+import { absOf, changedOnDisk, getExplorer, getTouched, history, paneState, saved, setPreview, updateExplorer, updateTouched } from './state'
+
+/** Whether two listings show the same thing: names, sizes, times and git letters. */
+const sameListing = (a: Entry[], b: Entry[]) =>
+  a.length === b.length && a.every((e, i) => {
+    const o = b[i]
+    return o !== undefined && e.path === o.path && e.kind === o.kind && e.size === o.size && e.mtimeMs === o.mtimeMs && e.git === o.git
+  })
+
+let isPolling = false
+
+/**
+ * Every few seconds while the pane is open: the folder's listing and git status, and the open file
+ * if it changed on disk (edited in another editor). Writes, and so redraws, only what changed.
+ */
+export async function poll($: EngineInterface) {
+  if (isPolling || !paneState.isOpen) return
+  isPolling = true
+  try {
+    const ex = await getExplorer($)
+    if (!ex.root) return
+    if (ex.preview) {
+      const p = ex.preview
+      const st = await $.fs.stat(absOf(ex.root, p.path)).catch(() => null)
+      if (changedOnDisk(st, p)) await reloadChanged($, p, false)
+      await fetchBase($, ex.root, p.path)
+    }
+    if (ex.onlyTouched) return
+    const listed = await listDir($, ex.root, ex.dir).catch(() => null)
+    if (!listed) return
+    const { entries, repo } = await gitStatusOf($, ex.root, ex.dir, listed)
+    const sameRepo = JSON.stringify(repo ?? null) === JSON.stringify(ex.repo ?? null)
+    if (sameRepo && sameListing(entries, ex.entries)) return
+    await updateExplorer($, cur => {
+      if (cur.dir !== ex.dir) return cur
+      // Keep the cursor on the same entry when files come and go.
+      // The cursor indexes the visible rows, not every entry.
+      const at = visibleEntries(cur)[cur.cursor]?.path
+      const next = { ...cur, entries, repo }
+      const rows = visibleEntries(next)
+      const idx = at ? rows.findIndex(e => e.path === at) : -1
+      return { ...next, cursor: idx >= 0 ? idx : Math.min(cur.cursor, Math.max(0, rows.length - 1)) }
+    })
+  } finally {
+    isPolling = false
+  }
+}
+
+async function listDir($: EngineInterface, root: string, dir: string): Promise<Entry[]> {
+  const raw = await $.fs.list(joinPath(root, dir))
+  const entries = await Promise.all(
+    raw.map(async r => {
+      const path = dir ? `${dir}/${r.name}` : r.name
+      let kind = r.kind
+      // A symbolic link lists as `other`: show it as what it leads to.
+      if (r.isLink) {
+        const s = await $.fs.stat(joinPath(root, path)).catch(() => undefined)
+        if (s) kind = s.kind
+      }
+      return { name: r.name, path, kind, size: r.size, mtimeMs: r.mtimeMs }
+    }),
+  )
+  return sortEntries(entries)
+}
+
+/** Loads `dir` into the explorer, the cursor on `select` when it is there. */
+export async function loadDir($: EngineInterface, dir: string, select?: string) {
+  const ex = await getExplorer($)
+  try {
+    const listed = ex.onlyTouched ? touchedEntries(await getTouched($)) : await listDir($, ex.root, dir)
+    const { entries, repo } = await gitStatusOf($, ex.root, dir, listed).catch(() => ({ entries: listed, repo: null }))
+    await updateExplorer($, x => {
+      const next: Explorer = { ...x, dir, entries, repo, preview: null, error: null, cursor: 0 }
+      const at = select ? visibleEntries(next).findIndex(e => e.path === select) : -1
+      return { ...next, cursor: Math.max(0, at) }
+    })
+  } catch (err) {
+    await updateExplorer($, x => ({ ...x, error: `cannot open ${dir || '.'}: ${String(err)}` }))
+  }
+}
+
+/** Reads `path` into the preview; `keep` carries the mode, cursor and scroll over a reload. */
+export async function loadPreview($: EngineInterface, path: string, keep: Partial<Preview> = {}) {
+  const ex = await getExplorer($)
+  const abs = absOf(ex.root, path)
+  try {
+    const st = await $.fs.stat(abs)
+    const kind = kindOf(path)
+    if (kind === 'image') {
+      const picture = await loadPicture($, abs, st.size, st.mtimeMs)
+      await updateExplorer($, x => ({
+        ...x,
+        error: null,
+        preview: emptyPreview(path, { kind: 'image', lines: [], mtimeMs: st.mtimeMs, readOnly: 'picture', ...picture }),
+      }))
+      return
+    }
+    const text = st.size > MAX_PREVIEW_BYTES ? '' : await $.fs.read(abs)
+    const fresh: Preview = { ...previewOf(path, text, st.size, st.mtimeMs), kind, mdView: keep.mdView ?? 'rendered' }
+    const isEdit = keep.mode === 'edit' && fresh.readOnly === null
+    const preview: Preview = {
+      ...fresh,
+      mode: isEdit ? 'edit' : 'view',
+      top: Math.min(keep.top ?? 0, Math.max(0, fresh.lines.length - 1)),
+      row: Math.min(keep.row ?? 0, Math.max(0, fresh.lines.length - 1)),
+      col: keep.col ?? 0,
+      status: keep.status ?? null,
+    }
+    history.delete(path)
+    saved.set(path, fresh.lines)
+    if (!opened.has(path)) opened.set(path, fresh.lines)
+    bases.delete(path)
+    void fetchBase($, ex.root, path).catch(() => undefined)
+    await updateExplorer($, x => ({ ...x, preview, error: null }))
+  } catch (err) {
+    await updateExplorer($, x => ({ ...x, error: `cannot read ${path}: ${String(err)}` }))
+  }
+}
+
+/** The open file changed on disk: show the new text, or warn once when the person has unsaved edits. */
+export async function reloadChanged($: EngineInterface, p: Preview, isByClaude: boolean) {
+  if (!p.dirty) {
+    const status = isByClaude ? 'reloaded: Claude changed this file' : 'reloaded: changed on disk'
+    return loadPreview($, p.path, { mode: p.mode, top: p.top, row: p.row, col: p.col, status })
+  }
+  if (p.confirm === 'overwrite' || p.status?.includes('changed on disk')) return
+  const who = isByClaude ? 'Claude changed this file' : 'the file changed'
+  await setPreview($, x => ({ ...x, status: `${who} on disk: saving will ask before overwriting` }))
+}
+
+/** Records a file Claude edited, and shows it in the folder on screen. */
+export async function noteEdit($: EngineInterface, e: unknown) {
+  const input = e as unknown as { file_path?: unknown; notebook_path?: unknown }
+  const abs = typeof input.file_path === 'string' ? input.file_path : typeof input.notebook_path === 'string' ? input.notebook_path : null
+  if (!abs) return
+  const ex = await getExplorer($)
+  const path = relTo(ex.root, abs)
+  await updateTouched($, t => ({ ...t, [path]: (t[path] ?? 0) + 1 }))
+  // The file open in the preview changed under it: show the new text, unless the person has unsaved edits.
+  if (ex.preview && ex.preview.path === path) await reloadChanged($, ex.preview, true)
+  // A new file in the folder on screen shows without a manual refresh.
+  if (!ex.preview && !ex.onlyTouched && parentOf(path) === ex.dir && !ex.entries.some(x => x.path === path)) await loadDir($, ex.dir)
+  if (ex.onlyTouched) await loadDir($, ex.dir)
+}

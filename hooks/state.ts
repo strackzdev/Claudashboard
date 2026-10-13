@@ -5,7 +5,7 @@ import type { Agent, Explorer, Preview, Vitals } from '../types'
 import { normalizeAgent } from './agents'
 import { DEFAULT_EXPLORER, DEFAULT_VITALS, emptyPreview, normalize } from './explorer-state'
 import type { Key } from './explorer-state'
-import { joinPath } from './paths'
+import { isAbsolute, joinPath } from './paths'
 
 export const PANE = 'strackzdevhub'
 export const TITLE = 'STRACKZDEVHUB'
@@ -93,4 +93,4 @@ export async function openPane($: EngineInterface) {
   return opened
 }
 
-export const absOf = (root: string, path: string) => (path.startsWith('/') ? path : joinPath(root, path))
+export const absOf = (root: string, path: string) => (isAbsolute(path) ? path : joinPath(root, path))

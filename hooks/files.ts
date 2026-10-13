@@ -4,7 +4,7 @@ import type { Entry, Explorer, Preview } from '../types'
 import { MAX_PREVIEW_BYTES, emptyPreview, previewOf, sortEntries, touchedEntries, visibleEntries } from './explorer-state'
 import { bases, fetchBase, gitStatusOf, opened } from './git'
 import { kindOf } from './media'
-import { joinPath, parentOf, relTo } from './paths'
+import { joinPath, parentOf, relTo, toSlash } from './paths'
 import { loadPicture } from './picture'
 import { absOf, changedOnDisk, getExplorer, getTouched, history, paneState, saved, setPreview, updateExplorer, updateTouched } from './state'
 
@@ -139,8 +139,9 @@ export async function reloadChanged($: EngineInterface, p: Preview, isByClaude: 
 /** Records a file Claude edited, and shows it in the folder on screen. */
 export async function noteEdit($: EngineInterface, e: unknown) {
   const input = e as unknown as { file_path?: unknown; notebook_path?: unknown }
-  const abs = typeof input.file_path === 'string' ? input.file_path : typeof input.notebook_path === 'string' ? input.notebook_path : null
-  if (!abs) return
+  const given = typeof input.file_path === 'string' ? input.file_path : typeof input.notebook_path === 'string' ? input.notebook_path : null
+  if (!given) return
+  const abs = toSlash(given)
   const ex = await getExplorer($)
   const path = relTo(ex.root, abs)
   await updateTouched($, t => ({ ...t, [path]: (t[path] ?? 0) + 1 }))

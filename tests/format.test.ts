@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { windowTop } from '../hooks/explorer-state'
 import { fmtAge, gauge, prettyModel } from '../hooks/format'
-import { parentOf, relTo } from '../hooks/paths'
+import { isAbsolute, parentOf, relTo, toSlash } from '../hooks/paths'
 
 test('paths and formatting', () => {
   expect(relTo('/p', '/p/src/a.ts')).toBe('src/a.ts')
@@ -14,4 +14,13 @@ test('paths and formatting', () => {
   expect(fmtAge(10_000)).toBe('just now')
   expect(windowTop(0, 100, 10)).toBe(0)
   expect(windowTop(99, 100, 10)).toBe(90)
+})
+
+test('Windows paths: backslashes become slashes, a drive letter is absolute', () => {
+  const root = toSlash('C:\\Users\\me\\proj')
+  expect(root).toBe('C:/Users/me/proj')
+  expect(relTo(root, toSlash('C:\\Users\\me\\proj\\src\\a.ts'))).toBe('src/a.ts')
+  expect(isAbsolute('C:/x')).toBe(true)
+  expect(isAbsolute('/x')).toBe(true)
+  expect(isAbsolute('src/x')).toBe(false)
 })

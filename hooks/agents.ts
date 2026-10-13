@@ -1,12 +1,12 @@
 // Pure logic for STRACKZDEVHUB: subagent cards and what their tool calls do. No `$` here, so it is testable.
 import type { Agent } from '../types'
-import { baseName } from './paths'
+import { baseName, toSlash } from './paths'
 
 /** One line on what a tool call does: `Read middleware.ts`, `Bash npm test`. */
 export function describeTool(tool: string, input: Record<string, unknown>): string {
   const str = (k: string) => (typeof input[k] === 'string' ? (input[k] as string) : '')
   const file = str('file_path') || str('notebook_path') || str('path')
-  if (file && /^(Read|Edit|Write|MultiEdit|NotebookEdit)$/.test(tool)) return `${tool} ${baseName(file)}`
+  if (file && /^(Read|Edit|Write|MultiEdit|NotebookEdit)$/.test(tool)) return `${tool} ${baseName(toSlash(file))}`
   if (tool === 'Bash') return `$ ${str('command').split('\n')[0]}`
   if (tool === 'Grep' || tool === 'Glob') return `${tool} ${str('pattern')}`
   if (tool === 'WebFetch') return `fetch ${str('url').replace(/^https?:\/\//, '')}`

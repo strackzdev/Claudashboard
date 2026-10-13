@@ -3,7 +3,7 @@ import type { EngineInterface } from 'claude-code'
 import type { Preview } from '../types'
 import { fmtSize } from './format'
 import { fromBase64, pngSize } from './media'
-import { baseName } from './paths'
+import { baseName, toSlash } from './paths'
 
 /** The external tool that turns a JPEG, GIF, WebP or BMP into a PNG, found once: ImageMagick, then ffmpeg. */
 let converter: string[] | null | undefined
@@ -21,6 +21,19 @@ async function findConverter($: EngineInterface): Promise<string[] | null> {
   return null
 }
 
+/** The folder converted pictures go in, under the system's temp folder; made once. */
+let cacheDir: string | undefined
+
+async function pictureCache($: EngineInterface): Promise<string> {
+  if (cacheDir) return cacheDir
+  const tmp = (await $.env.get('TMPDIR')) ?? (await $.env.get('TEMP')) ?? (await $.env.get('TMP')) ?? '/tmp'
+  const dir = `${toSlash(tmp).replace(/\/+$/, '')}/strackzdevhub-pictures`
+  // A write makes the folders it needs, so the converter has somewhere to put its file.
+  await $.fs.write(`${dir}/.keep`, '')
+  cacheDir = dir
+  return dir
+}
+
 /**
  * A picture ready for the terminal: a PNG as it is, anything else converted to a PNG under the
  * system's temp folder (keyed by path and mtime, so an edited picture converts again).
@@ -31,9 +44,8 @@ export async function loadPicture($: EngineInterface, abs: string, size: number,
   if (!/\.png$/i.test(abs)) {
     const tool = await findConverter($)
     if (!tool) return { image: null, note: `${label}: install ImageMagick or ffmpeg to preview this format (PNG shows as is)` }
-    const out = `/tmp/strackzdevhub-pictures/${abs.replace(/[^A-Za-z0-9._-]/g, '_')}.${Math.round(mtimeMs)}.png`
+    const out = `${await pictureCache($)}/${abs.replace(/[^A-Za-z0-9._-]/g, '_')}.${Math.round(mtimeMs)}.png`
     if (!(await $.fs.exists(out))) {
-      await $.process.run(['mkdir', '-p', '/tmp/strackzdevhub-pictures'], { timeoutMs: 3000 }).catch(() => null)
       const argv = tool[0] === 'ffmpeg' ? ['ffmpeg', '-y', '-loglevel', 'error', '-i', abs, '-frames:v', '1', out] : [tool[0] ?? 'magick', `${abs}[0]`, out]
       const r = await $.process.run(argv, { timeoutMs: 20000 }).catch(() => null)
       if (!r || r.exitCode !== 0) return { image: null, note: `${label}: could not convert it to PNG` }

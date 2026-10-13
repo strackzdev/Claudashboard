@@ -11,3 +11,9 @@ export function relTo(root: string, abs: string): string {
   const r = root.replace(/\/+$/, '')
   return abs.startsWith(`${r}/`) ? abs.slice(r.length + 1) : abs
 }
+
+/** A path with `/` between its parts: Windows hands out `C:\a\b`, the explorer and git use `C:/a/b`. */
+export const toSlash = (path: string) => path.replace(/\\/g, '/')
+
+/** `/a` or `C:/a`; the path already has `/` separators. */
+export const isAbsolute = (path: string) => /^([A-Za-z]:)?\//.test(path)

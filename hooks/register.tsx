@@ -9,7 +9,7 @@ import { DEFAULT_EXPLORER, reduceKey, visibleEntries } from './explorer-state'
 import { loadDir, loadPreview, noteEdit, poll } from './files'
 import { refreshGit } from './git'
 import { ONE_DARK, THEME, registerPane } from './pane'
-import { parentOf, relTo } from './paths'
+import { isAbsolute, parentOf, relTo, toSlash } from './paths'
 import { PANE, getExplorer, openPane, paneState, setExplorer, toKey, updateAgents, updateExplorer, updateTouched, updateVitals, usageToVitals } from './state'
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
@@ -42,7 +42,7 @@ async function mention($: EngineInterface, path: string) {
 }
 
 async function initExplorer($: EngineInterface, showHidden: boolean) {
-  const root = await $.session.cwd()
+  const root = toSlash(await $.session.cwd())
   const ex = await getExplorer($)
   // Keep where the person was across reloads; start over when the session moved to another folder.
   if (ex.root === root) {
@@ -137,10 +137,10 @@ export const register: Register = (on, options) => {
     }
     if (verb === 'cd') {
       const ex = await getExplorer($)
-      const target = args.slice(2).trim().replace(/^\.\/?/, '').replace(/\/+$/, '')
+      const target = toSlash(args.slice(2).trim()).replace(/^\.\/?/, '').replace(/\/+$/, '')
       const root = ex.root.replace(/\/+$/, '')
-      const rel = target === root ? '' : target.startsWith('/') ? relTo(root, target) : target
-      if (rel.startsWith('/') || rel.split('/').includes('..')) return { text: `${target} is outside ${ex.root}.` }
+      const rel = target === root ? '' : isAbsolute(target) ? relTo(root, target) : target
+      if (isAbsolute(rel) || rel.split('/').includes('..')) return { text: `${target} is outside ${ex.root}.` }
       await updateExplorer($, x => ({ ...x, onlyTouched: false, filter: '' }))
       await loadDir($, rel)
       const after = await getExplorer($)

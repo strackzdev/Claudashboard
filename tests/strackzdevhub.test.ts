@@ -462,13 +462,15 @@ test('in a repo, the list shows git letters and the file shows its changed lines
   expect((listed.rows as Array<{ git: unknown }>)[0]?.git).toEqual({ letter: 'M', tone: 'modified' })
   await ui.key({ key: 'return', in: 'explorer' })
   const viewed = await explorerProps(ui)
-  expect(viewed.gutter).toEqual([null, { glyph: '▎', tone: 'modified' }, null])
+  expect(viewed.gutter).toEqual([null, { glyph: '▌', tone: 'modified' }, null])
   expect((viewed.changes as { modified: number }).modified).toBe(1)
+  // Blank lines stay one row each, so the gutter lines up with the text.
+  expect((viewed.code as { source: string }).source.split('\n')).toHaveLength(3)
   // Edit line 1 without saving: it shows as unsaved.
   await ui.key({ key: 'e', in: 'explorer' })
   await ui.key({ key: 'x', in: 'explorer' })
   const edited = await explorerProps(ui)
-  expect((edited.gutter as unknown[])[0]).toEqual({ glyph: '▎', tone: 'unsaved' })
+  expect((edited.gutter as unknown[])[0]).toEqual({ glyph: '▌', tone: 'unsaved' })
   expect((edited.changes as { unsaved: number }).unsaved).toBe(1)
   await ui.unmount()
 })

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2 — 2026-10-13
+
+- Changed lines are much easier to see: the gutter draws its own line numbers, coloured and bold on changed lines (green added, blue modified, yellow unsaved, purple staged), with a thicker bar.
+- Fix: blank lines no longer collapse in the view, which shifted the text against the gutter.
+- The file list colours a changed file's name by its git status, as VS Code does.
+
 ## 0.4.1 — 2026-10-13
 
 - **Live refresh** every 3 seconds while the pane is open: files edited, created or deleted in another editor, and `git add` / `commit` run elsewhere, show without any action. An open file reloads when it changes on disk (or warns, if you have unsaved edits). Nothing redraws when nothing changed.

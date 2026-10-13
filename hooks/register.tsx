@@ -499,7 +499,7 @@ async function noteSpawn(
 /** One gutter cell: a bar for an added or modified line, a low bar where lines were deleted. */
 function gutterMark(m: LineMark): GutterMark | null {
   if (!m.layer) return null
-  return { glyph: m.change ? '▎' : '▁', tone: m.layer === 'unsaved' ? 'unsaved' : m.layer === 'staged' ? 'staged' : m.change ?? 'deleted' }
+  return { glyph: m.change ? '▌' : '▁', tone: m.layer === 'unsaved' ? 'unsaved' : m.layer === 'staged' ? 'staged' : m.change ?? 'deleted' }
 }
 
 export const register: Register = (on, options) => {
@@ -913,7 +913,7 @@ export const register: Register = (on, options) => {
         top: 0,
         room,
         width: inner,
-        code: !isEdit && end > p.top ? { source: p.lines.slice(p.top, end).map(l => clipEnd(l, MAX_DRAWN)).join('\n'), path: p.path, startLine: p.top + 1 } : null,
+        code: !isEdit && end > p.top ? { source: p.lines.slice(p.top, end).map(l => clipEnd(l, MAX_DRAWN) || ' ').join('\n'), path: p.path, startLine: p.top + 1 } : null,
         note: noteText,
         empty: null,
         colors: C,

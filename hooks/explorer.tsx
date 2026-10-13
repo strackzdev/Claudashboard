@@ -167,6 +167,11 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
     const m = props.gutter?.[i]
     return m ? <Text color={markColor(m.tone)}>{m.glyph}</Text> : <Text> </Text>
   }
+  /** A changed line's number takes its change's colour, bold; the rest stay dim. */
+  const numberColor = (i: number) => {
+    const m = props.gutter?.[i]
+    return m && m.tone !== 'deleted' ? markColor(m.tone) : undefined
+  }
   const W = Math.max(20, props.width)
   const metaW = props.mode === 'list' ? Math.min(20, Math.max(0, W - 24)) : 0
   const nameW = Math.max(6, W - metaW - 6)
@@ -218,7 +223,8 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
       ) : null}
       {props.rows.map((r, i) => {
         const bg = r.isSelected ? c.selectedBg : undefined
-        const nameColor = r.isDir ? c.dir : r.isTouched ? c.touched : c.text
+        // As in VS Code: a changed file's name takes its git colour.
+        const nameColor = r.git && r.git.letter !== '•' ? letterColor(r.git.tone) : r.isDir ? c.dir : r.isTouched ? c.touched : c.text
         return (
           <Box key={`row${i}`} flexDirection="row" width={W}>
             <Text backgroundColor={bg} color={r.isSelected ? c.accent : c.dim} hover={{ backgroundColor: c.hoverBg }}>
@@ -263,7 +269,9 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
           return (
             <Text wrap="truncate-end">
               {markAt(i)}
-              <Text color={c.dim}>{gutter}</Text>
+              <Text color={numberColor(i) ?? c.dim} bold={numberColor(i) !== undefined}>
+                {gutter}
+              </Text>
               <Text color={c.text}>{line.slice(0, ev.textW)}</Text>
             </Text>
           )
@@ -276,7 +284,7 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
         return (
           <Text wrap="truncate-end">
             {markAt(i)}
-            <Text color={c.warn} bold>
+            <Text color={numberColor(i) ?? c.warn} bold>
               {gutter}
             </Text>
             <Text backgroundColor={c.selectedBg} color={c.text}>
@@ -294,6 +302,7 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
     </Box>
   ) : null
 
+  const numW = Math.max(3, String((props.code?.startLine ?? 1) + Math.max(0, (props.code?.source.split('\n').length ?? 1) - 1)).length)
   const preview = (
     <Box flexDirection="column" height={props.room}>
       {props.note ? (
@@ -304,11 +313,19 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
       {editor}
       {props.code && props.code.source ? (
         <Box flexDirection="row" width={W}>
-          <Box flexDirection="column" width={1} flexShrink={0}>
-            {props.code.source.split('\n').map((_, i) => markAt(i))}
+          <Box flexDirection="column" width={numW + 3} flexShrink={0}>
+            {props.code.source.split('\n').map((_, i) => (
+              <Text>
+                {markAt(i)}
+                <Text color={numberColor(i) ?? c.dim} bold={numberColor(i) !== undefined}>
+                  {String((props.code?.startLine ?? 1) + i).padStart(numW)}
+                </Text>
+                <Text color={c.dim}>{' │'}</Text>
+              </Text>
+            ))}
           </Box>
-          <Box flexDirection="column" width={W - 1}>
-            <Code source={props.code.source} path={props.code.path} startLine={props.code.startLine} wrap="truncate-end" />
+          <Box flexDirection="column" width={Math.max(1, W - numW - 4)} marginLeft={1}>
+            <Code source={props.code.source} path={props.code.path} wrap="truncate-end" />
           </Box>
         </Box>
       ) : null}

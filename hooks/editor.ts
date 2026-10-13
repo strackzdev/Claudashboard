@@ -1,7 +1,8 @@
 // Pure logic for the in-pane editor: keys against the text, cursor and display columns. No `$` here.
 import type { Preview } from '../types'
-import { hasNoteRow } from './core'
-import type { Key } from './core'
+import { hasNoteRow } from './explorer-state'
+import type { Key } from './explorer-state'
+import { clamp } from './format'
 
 /** Cells a tab takes on screen; the cursor's display column counts it so. */
 export const TAB = 2
@@ -13,8 +14,6 @@ const NAMED = new Set([
 ])
 
 export type EditEffect = 'save' | 'exit' | 'undo' | null
-
-const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n))
 
 /** A line as drawn: tabs as TAB spaces. */
 export const displayOf = (line: string) => line.replace(/\t/g, ' '.repeat(TAB))

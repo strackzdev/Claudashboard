@@ -186,9 +186,14 @@ hooks/explorer.tsx   the explorer's client module (keys, clicks, list, preview, 
 hooks/editor.ts      pure editor logic: keys against the text, cursor, tabs (unit-tested)
 hooks/gitdiff.ts     pure line diff and git status parsing for the gutter (unit-tested)
 hooks/elapsed.tsx    a live timer that ticks without redrawing the pane
-hooks/core.ts        pure logic: formatting, paths, the key reducer (unit-tested)
+hooks/explorer-state.ts  pure explorer state: defaults, sorting, the preview, the key reducer (unit-tested)
+hooks/format.ts      pure formatting: money, tokens, sizes, times, models, clipping (unit-tested)
+hooks/paths.ts       pure path helpers: join, parent, base name, relative (unit-tested)
+hooks/agents.ts      pure subagent helpers: tool descriptions, step usage (unit-tested)
+hooks/header.ts      pure fitting of the file box's header and breadcrumb (unit-tested)
+hooks/media.ts       pure markdown windows, PNG sizes and picture fitting (unit-tested)
 types/index.d.ts     the mod's $.state contract
-tests/               claude plugin test
+tests/               claude plugin test: one file per module, pane.test.ts end to end
 ```
 
 ```sh

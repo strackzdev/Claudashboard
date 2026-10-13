@@ -22,7 +22,7 @@ import {
   windowTop,
 } from '../hooks/core'
 import { colFromVisual, reduceEdit, textOf, visualCol } from '../hooks/editor'
-import { diffLines, lineMarks, parsePorcelain, statusLetter } from '../hooks/gitdiff'
+import { countStatus, diffLines, lineMarks, parseBranch, parsePorcelain, statusLetter } from '../hooks/gitdiff'
 import type { Entry, Explorer } from '../types'
 
 const file = (path: string, kind: Entry['kind'] = 'file'): Entry => ({
@@ -470,5 +470,37 @@ test('in a repo, the list shows git letters and the file shows its changed lines
   const edited = await explorerProps(ui)
   expect((edited.gutter as unknown[])[0]).toEqual({ glyph: '▎', tone: 'unsaved' })
   expect((edited.changes as { unsaved: number }).unsaved).toBe(1)
+  await ui.unmount()
+})
+
+test('the project bar reads the branch, ahead/behind and counts', () => {
+  const out = '## main...origin/main [ahead 9, behind 8]\0 M a.ts\0M  b.ts\0?? c.ts\0MM d.ts\0'
+  expect(parseBranch(out)).toEqual({ branch: 'main', ahead: 9, behind: 8 })
+  expect(parseBranch('## No commits yet on dev\0')).toEqual({ branch: 'dev', ahead: 0, behind: 0 })
+  const st = parsePorcelain(out)
+  expect(st.has('main...origin/main [ahead 9, behind 8]')).toBe(false)
+  expect(countStatus(st)).toEqual({ changed: 3, staged: 2 })
+})
+
+test('a file edited in another editor shows as changed without any action', async ($, on) => {
+  const clock = mock.clock(on)
+  const files = disk(on, { '/w/a.ts': 'one\n' })
+  let status = ''
+  const out = (exitCode: number, stdout: string) => ({ value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
+  on('process.run', (_$, e) => {
+    const args = e.argv.slice(3).join(' ')
+    if (args === 'rev-parse --show-toplevel') return out(0, '/w\n')
+    if (args.startsWith('status')) return out(0, `## main\0${status}`)
+    if (args === 'show HEAD:a.ts' || args === 'show :a.ts') return out(0, 'one\n')
+    return out(1, '')
+  })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  expect((await explorerProps(ui)).rows).toEqual([expect.objectContaining({ git: null })])
+  // Someone edits a.ts elsewhere: on the next tick the list says so.
+  files.writeOutside('/w/a.ts', 'one\ntwo\n')
+  status = ' M a.ts\0'
+  await clock.advance(3000)
+  expect((await explorerProps(ui)).rows).toEqual([expect.objectContaining({ git: { letter: 'M', tone: 'modified' } })])
   await ui.unmount()
 })

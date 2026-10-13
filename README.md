@@ -137,6 +137,10 @@ Every line of an open file has a gutter mark, in view mode and edit mode, layere
 
 The footer adds them up, for example `● 2 unsaved  +3 ~2 −1  ✓4 staged`. In the file list, each file shows its git status: `M` modified, `S` or `A` staged, `U` untracked, `D` deleted, `!` conflict. Folders holding changes get a `•`.
 
+Inside a git repository, a project bar sits above the files: `⎇ strackzdevhub  on main ↑2 ↓1` and `3 changed · 1 staged` (or `✓ clean`).
+
+While the pane is open, it refreshes every 3 seconds: files you edit, create or delete in another editor, and `git add` / `commit` run in a terminal, show up on their own. An open file reloads when it changes on disk, or warns you if you have unsaved edits.
+
 Outside a git repository, the gutter compares the file with how it was when you first opened it, so lines you changed and saved still show (`since opened`). The marks refresh after each save, when you leave the file, after each Claude turn, and when you press `r` in the preview.
 
 Files Claude edited or created this session are marked **✎** in yellow, and new files appear automatically. The preview won't show binary files or files over 1 MB, and it shows at most the first 5,000 lines.

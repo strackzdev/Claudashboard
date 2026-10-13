@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 — 2026-10-13
+
+- **Live refresh** every 3 seconds while the pane is open: files edited, created or deleted in another editor, and `git add` / `commit` run elsewhere, show without any action. An open file reloads when it changes on disk (or warns, if you have unsaved edits). Nothing redraws when nothing changed.
+- **Project bar** above the files inside a git repository: `⎇ project  on branch ↑ahead ↓behind`, and `n changed · n staged` or `✓ clean`. Outside a repository, git is not called beyond finding that out.
+- One `git status` per refresh for the whole repository (it was one per folder).
+
 ## 0.4.0 — 2026-10-13
 
 - **Git gutter** beside every line, in view and edit mode: yellow = unsaved, green = added, blue = modified, red `▁` = lines deleted below, purple = staged. Layered like git: unsaved edits over unstaged changes over staged ones.

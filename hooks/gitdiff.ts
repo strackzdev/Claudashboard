@@ -204,7 +204,7 @@ export function parsePorcelain(out: string): Map<string, string> {
   const parts = out.split('\0')
   for (let i = 0; i < parts.length; i++) {
     const entry = parts[i] ?? ''
-    if (entry.length < 4) continue
+    if (entry.length < 4 || entry.startsWith('## ')) continue
     const xy = entry.slice(0, 2)
     map.set(entry.slice(3), xy)
     // A rename or copy is followed by its old path, which has no status of its own.
@@ -223,4 +223,27 @@ export function statusLetter(xy: string): { letter: string; tone: 'staged' | 'mo
   if (y !== ' ') return { letter: 'M', tone: 'modified' }
   if (x !== ' ') return { letter: x === 'A' ? 'A' : 'S', tone: 'staged' }
   return null
+}
+
+/** The `## branch...upstream [ahead 1, behind 2]` header of `git status -b`. */
+export function parseBranch(out: string): { branch: string; ahead: number; behind: number } {
+  const header = out.split('\0').find(p => p.startsWith('## ')) ?? ''
+  const h = header.slice(3)
+  const ahead = Number(/ahead (\d+)/.exec(h)?.[1] ?? 0)
+  const behind = Number(/behind (\d+)/.exec(h)?.[1] ?? 0)
+  let branch = h.replace(/\s*\[.*\]$/, '').split('...')[0] ?? ''
+  if (branch.startsWith('No commits yet on ')) branch = branch.slice('No commits yet on '.length)
+  if (branch.startsWith('HEAD (no branch)')) branch = 'detached'
+  return { branch: branch || '?', ahead, behind }
+}
+
+/** Counts of changed (unstaged or untracked) and staged files in a status map. */
+export function countStatus(status: Map<string, string>): { changed: number; staged: number } {
+  let changed = 0
+  let staged = 0
+  for (const xy of status.values()) {
+    if (xy === '??' || (xy[1] ?? ' ') !== ' ') changed++
+    if (xy !== '??' && (xy[0] ?? ' ') !== ' ') staged++
+  }
+  return { changed, staged }
 }

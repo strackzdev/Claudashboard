@@ -14,7 +14,7 @@ export type Row = {
   /** The file's git status letter, or a dot on a folder holding changes. */
   git: GitLetter | null
 }
-
+// test
 /** One gutter cell beside a line: a bar coloured by what changed it, a low bar where lines were deleted. */
 export type GutterMark = { glyph: string; tone: 'unsaved' | 'added' | 'modified' | 'deleted' | 'staged' }
 

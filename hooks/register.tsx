@@ -2,7 +2,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Agent, Entry, Explorer, Preview, Vitals } from '../types'
+import type { Agent, Entry, Explorer, Preview, RepoInfo, Vitals } from '../types'
 import {
   DEFAULT_EXPLORER,
   DEFAULT_VITALS,
@@ -38,7 +38,7 @@ import {
   windowTop,
 } from './core'
 import { colFromVisual, displayOf, reduceEdit, textOf, visualCol } from './editor'
-import { lineMarks, parsePorcelain, splitText, statusLetter } from './gitdiff'
+import { countStatus, lineMarks, parseBranch, parsePorcelain, splitText, statusLetter } from './gitdiff'
 import type { LineMark } from './gitdiff'
 import type { ExplorerProps, GutterMark, Hint, Palette } from './explorer'
 
@@ -128,54 +128,114 @@ async function fetchBase($: EngineInterface, root: string, path: string) {
     const abs = absOf(root, path)
     const top = await repoTop($, parentOf(abs) || '/')
     const first = opened.get(path) ?? []
+    let base: Base
     if (!top) {
-      bases.set(path, { repo: false, head: first, index: first })
+      base = { repo: false, head: first, index: first }
     } else {
       const rel = relTo(top, abs)
       const [head, index] = await Promise.all([git($, top, ['show', `HEAD:${rel}`]), git($, top, ['show', `:${rel}`])])
       // Not in HEAD (a new file) or not in the index (untracked): every line counts as added.
-      bases.set(path, {
+      base = {
         repo: true,
         head: head.exitCode === 0 ? splitText(head.stdout) : [],
         index: index.exitCode === 0 ? splitText(index.stdout) : [],
-      })
+      }
     }
+    const old = bases.get(path)
+    const same = (a: string[], b: string[]) => a.length === b.length && a.every((l, i) => l === b[i])
+    if (old && old.repo === base.repo && same(old.head, base.head) && same(old.index, base.index)) return
+    bases.set(path, base)
     await update($, gitTick, n => (n ?? 0) + 1)
   } finally {
     fetching.delete(path)
   }
 }
 
-/** git status letters for the entries of `dir`: a letter per changed file, a dot on folders holding changes. */
-async function gitStatusOf($: EngineInterface, root: string, dir: string, entries: Entry[]): Promise<Entry[]> {
-  const absDir = absOf(root, dir)
-  const top = await repoTop($, absDir)
-  if (!top) return entries
-  const r = await git($, absDir, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', '.'])
-  if (r.exitCode !== 0) return entries
+/**
+ * git status for the entries of `dir`, from one `git status` of its whole repository: a letter per
+ * changed file, a dot on folders holding changes, and the project bar's branch and counts.
+ * Outside a repository, nothing is asked of git beyond finding that out.
+ */
+async function gitStatusOf($: EngineInterface, root: string, dir: string, entries: Entry[]): Promise<{ entries: Entry[]; repo: RepoInfo | null }> {
+  const plain = entries.map(e => (e.git === undefined ? e : { ...e, git: undefined }))
+  const top = await repoTop($, absOf(root, dir))
+  if (!top) return { entries: plain, repo: null }
+  const r = await git($, top, ['status', '--porcelain=v1', '-b', '-z', '--untracked-files=all'])
+  if (r.exitCode !== 0) return { entries: plain, repo: null }
   const status = parsePorcelain(r.stdout)
   const keys = [...status.keys()]
-  return entries.map(e => {
-    const rel = relTo(top, absOf(root, e.path))
-    if (e.kind === 'dir') return keys.some(k => k.startsWith(`${rel}/`)) ? { ...e, git: '•' } : e
-    const xy = status.get(rel)
-    return xy ? { ...e, git: xy } : e
+  const repo: RepoInfo = { name: baseName(top), ...parseBranch(r.stdout), ...countStatus(status) }
+  return {
+    repo,
+    entries: plain.map(e => {
+      const rel = relTo(top, absOf(root, e.path))
+      if (e.kind === 'dir') return keys.some(k => k.startsWith(`${rel}/`)) ? { ...e, git: '•' } : e
+      const xy = status.get(rel)
+      return xy ? { ...e, git: xy } : e
+    }),
+  }
+}
+
+/** Refreshes the git letters and project bar of the folder on screen, and the open file's base. */
+async function refreshGit($: EngineInterface) {
+  const ex = await getExplorer($)
+  if (ex.preview) await fetchBase($, ex.root, ex.preview.path)
+  if (ex.onlyTouched) return
+  const { entries, repo } = await gitStatusOf($, ex.root, ex.dir, ex.entries)
+  await update($, explorer, x => {
+    const cur = normalize(DEFAULT_EXPLORER, x)
+    return cur.dir === ex.dir ? { ...cur, entries, repo } : cur
   })
 }
 
-/** Refreshes the git letters of the folder on screen, and the open file's base. */
-async function refreshGit($: EngineInterface) {
-  const ex = await getExplorer($)
-  if (ex.preview) {
-    bases.delete(ex.preview.path)
-    await fetchBase($, ex.root, ex.preview.path)
-  }
-  if (!ex.onlyTouched && ex.entries.length) {
-    const entries = await gitStatusOf($, ex.root, ex.dir, ex.entries.map(e => ({ ...e, git: undefined })))
+/** Whether two listings show the same thing: names, sizes, times and git letters. */
+const sameListing = (a: Entry[], b: Entry[]) =>
+  a.length === b.length && a.every((e, i) => {
+    const o = b[i]
+    return o !== undefined && e.path === o.path && e.kind === o.kind && e.size === o.size && e.mtimeMs === o.mtimeMs && e.git === o.git
+  })
+
+let isPolling = false
+let isPaneOpen = false
+
+/**
+ * Every few seconds while the pane is open: the folder's listing and git status, and the open file
+ * if it changed on disk (edited in another editor). Writes, and so redraws, only what changed.
+ */
+async function poll($: EngineInterface) {
+  if (isPolling || !isPaneOpen) return
+  isPolling = true
+  try {
+    const ex = await getExplorer($)
+    if (!ex.root) return
+    if (ex.preview) {
+      const p = ex.preview
+      const st = await $.fs.stat(absOf(ex.root, p.path)).catch(() => null)
+      if (st && p.mtimeMs && Math.abs(st.mtimeMs - p.mtimeMs) > 1) {
+        if (!p.dirty) await loadPreview($, p.path, { mode: p.mode, top: p.top, row: p.row, col: p.col, status: 'reloaded: changed on disk' })
+        else if (p.confirm !== 'overwrite' && !p.status?.includes('changed on disk')) {
+          await setPreview($, x => ({ ...x, status: 'the file changed on disk: saving will ask before overwriting' }))
+        }
+      }
+      await fetchBase($, ex.root, p.path)
+    }
+    if (ex.onlyTouched) return
+    const listed = await listDir($, ex.root, ex.dir).catch(() => null)
+    if (!listed) return
+    const { entries, repo } = await gitStatusOf($, ex.root, ex.dir, listed)
+    const sameRepo = JSON.stringify(repo ?? null) === JSON.stringify(ex.repo ?? null)
+    if (sameRepo && sameListing(entries, ex.entries)) return
     await update($, explorer, x => {
       const cur = normalize(DEFAULT_EXPLORER, x)
-      return cur.dir === ex.dir ? { ...cur, entries } : cur
+      if (cur.dir !== ex.dir) return cur
+      // Keep the cursor on the same entry when files come and go.
+      const at = cur.entries[cur.cursor]?.path
+      const next = { ...cur, entries, repo }
+      const idx = at ? visibleEntries(next).findIndex(e => e.path === at) : -1
+      return { ...next, cursor: idx >= 0 ? idx : Math.min(cur.cursor, Math.max(0, entries.length - 1)) }
     })
+  } finally {
+    isPolling = false
   }
 }
 
@@ -190,7 +250,11 @@ const getAgents = async ($: EngineInterface): Promise<Agent[]> => {
   return Array.isArray(list) ? list.map(a => normalizeAgent(a)) : []
 }
 
-const openPane = ($: EngineInterface) => $.ui.open({ id: PANE, title: TITLE, columns: 76, rows: 30 })
+const openPane = async ($: EngineInterface) => {
+  const opened = await $.ui.open({ id: PANE, title: TITLE, columns: 76, rows: 30 })
+  isPaneOpen = true
+  return opened
+}
 
 async function listDir($: EngineInterface, root: string, dir: string): Promise<Entry[]> {
   const raw = await $.fs.list(joinPath(root, dir))
@@ -214,9 +278,9 @@ async function loadDir($: EngineInterface, dir: string, select?: string) {
   const ex = await getExplorer($)
   try {
     const listed = ex.onlyTouched ? touchedEntries(await getTouched($)) : await listDir($, ex.root, dir)
-    const entries = await gitStatusOf($, ex.root, dir, listed).catch(() => listed)
+    const { entries, repo } = await gitStatusOf($, ex.root, dir, listed).catch(() => ({ entries: listed, repo: null }))
     await update($, explorer, x => {
-      const next: Explorer = { ...normalize(DEFAULT_EXPLORER, x), dir, entries, preview: null, error: null, cursor: 0 }
+      const next: Explorer = { ...normalize(DEFAULT_EXPLORER, x), dir, entries, repo, preview: null, error: null, cursor: 0 }
       const at = select ? visibleEntries(next).findIndex(e => e.path === select) : -1
       return { ...next, cursor: Math.max(0, at) }
     })
@@ -451,6 +515,14 @@ export const register: Register = (on, options) => {
     await Promise.all([refreshUsage($), refreshModel($)]).catch(() => undefined)
     await initExplorer($, showHiddenDefault).catch(() => undefined)
     if (options.openOnStart !== false) void openPane($).catch(() => undefined)
+    // Live refresh: edits made in another editor, git add/commit run elsewhere.
+    $.clock.every(3000, () => poll($).catch(() => undefined))
+    return next(e)
+  })
+
+  // The person closed the pane (its ✕) or the module unloads: stop asking git and the disk.
+  on('ui.close', { id: PANE }, async ($, e, next) => {
+    isPaneOpen = false
     return next(e)
   })
 
@@ -464,6 +536,7 @@ export const register: Register = (on, options) => {
     const [verb = ''] = args.split(/\s+/)
     if (verb === 'close') {
       await $.ui.close({ id: PANE })
+      isPaneOpen = false
       return { text: 'STRACKZDEVHUB closed.' }
     }
     if (verb === 'reset') {
@@ -635,6 +708,8 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    // Drawn means open: the live refresh runs from here until the pane closes.
+    isPaneOpen = true
     const els = $.ui.resolve(e)
     const { Box, Text } = els
     const hasClient = 'Client' in els
@@ -775,7 +850,9 @@ export const register: Register = (on, options) => {
     const agentsRows = list.length === 0 ? 0 : 2 + 1 + shown.length * 2 + (more > 0 ? 1 : 0)
 
     // ---- explorer: breadcrumb and rule, the rows, the hint line
-    const room = Math.max(3, bodyRows - vitalsRows - agentsRows - 2 - 3)
+    // Inside a git repository, the project bar takes one row above the files.
+    const repo = ex.onlyTouched ? null : ex.repo ?? null
+    const room = Math.max(3, bodyRows - vitalsRows - agentsRows - 2 - 3 - (repo ? 1 : 0))
     const rows = visibleEntries(ex)
     const rootName = baseName(ex.root) || '/'
     const crumbs = ex.onlyTouched ? [rootName, '✎ touched'] : [rootName, ...(ex.dir ? ex.dir.split('/') : [])]
@@ -908,6 +985,32 @@ export const register: Register = (on, options) => {
 
     const filesBox = (
       <Box flexDirection="column" borderStyle="round" borderColor={ex.preview?.mode === 'edit' ? C.warn : ex.preview ? C.accent : C.frame} paddingX={1} width={W}>
+        {repo ? (
+          <Box flexDirection="row" justifyContent="space-between" width={inner}>
+            <Box flexShrink={1}>
+              <Text wrap="truncate-end">
+                <Text color={C.purple} bold>
+                  {'⎇ '}
+                </Text>
+                <Text color={C.text} bold>
+                  {repo.name}
+                </Text>
+                <Text color={C.dim}>{'  on '}</Text>
+                <Text color={C.purple}>{repo.branch}</Text>
+                {repo.ahead ? <Text color={C.ok}>{` ↑${repo.ahead}`}</Text> : null}
+                {repo.behind ? <Text color={C.bad}>{` ↓${repo.behind}`}</Text> : null}
+              </Text>
+            </Box>
+            <Box flexShrink={0} marginLeft={1}>
+              <Text>
+                {repo.changed ? <Text color={C.warn}>{`${repo.changed} changed`}</Text> : null}
+                {repo.changed && repo.staged ? <Text color={C.dim}>{' · '}</Text> : null}
+                {repo.staged ? <Text color={C.ok}>{`${repo.staged} staged`}</Text> : null}
+                {!repo.changed && !repo.staged ? <Text color={C.ok}>{'✓ clean'}</Text> : null}
+              </Text>
+            </Box>
+          </Box>
+        ) : null}
         {hasClient ? (
           <els.Client key="explorer" module="./explorer.tsx" props={props} width={inner} height={room + 3} />
         ) : (

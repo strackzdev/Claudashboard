@@ -52,6 +52,17 @@ export type Preview = {
   confirm: 'discard' | 'overwrite' | null
 }
 
+/** The git repository the folder on screen belongs to: drawn as the project bar above the files. */
+export type RepoInfo = {
+  name: string
+  branch: string
+  ahead: number
+  behind: number
+  /** Files with unstaged changes or untracked; files with staged changes. */
+  changed: number
+  staged: number
+}
+
 export type Explorer = {
   root: string
   dir: string
@@ -64,6 +75,8 @@ export type Explorer = {
   onlyTouched: boolean
   preview: Preview | null
   error: string | null
+  /** The repository holding the folder on screen, or null outside git. */
+  repo?: RepoInfo | null
 }
 
 /** A running subagent; it leaves the list when its turn completes. */

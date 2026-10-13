@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3 — 2026-10-13
+
+- Fix: the whole pane went blank while a request ran and came back when it ended. The live turn timer sat inside a text element, which the engine refuses (`Client inside an inline element`), so it drew its own empty pane. The timer now sits in a layout box; the pane stays up during requests with the timer ticking, and its values update when the request ends.
+
 ## 0.4.2 — 2026-10-13
 
 - Changed lines are much easier to see: the gutter draws its own line numbers, coloured and bold on changed lines (green added, blue modified, yellow unsaved, purple staged), with a thicker bar.

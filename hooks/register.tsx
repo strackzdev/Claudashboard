@@ -745,11 +745,12 @@ export const register: Register = (on, options) => {
     const gaugeW = Math.max(6, Math.min(24, inner - 36))
     const modeColor = C[modeColorKey(v.mode)]
     const isRunning = v.turnStartedAt !== null
+    // A live timer is a Client, which only a Box may hold: inside a Text the engine refuses the whole pane.
     const turn = isRunning ? (
-      <Text>
+      <Box flexDirection="row" flexShrink={0}>
         <Text color={C.ok}>● </Text>
         {clock('turn-timer', v.turnStartedAt ?? now, C.ok)}
-      </Text>
+      </Box>
     ) : (
       <Text color={C.dim}>{v.lastTurnMs === null ? '○ idle' : `○ idle · last ${fmtDuration(v.lastTurnMs)}`}</Text>
     )
@@ -834,7 +835,9 @@ export const register: Register = (on, options) => {
                       {a.model ? <Text color={C.purple}>{`  ${prettyModel(a.model)}`}</Text> : null}
                       <Text color={C.dim}>{`  ${a.steps} steps · ${a.tools} tools${a.ctx ? ` · ${fmtTokens(a.ctx)} ctx` : ''}`}</Text>
                     </Text>
-                    {clock(`agent-${a.id}`, a.startedAt, C.info)}
+                    <Box flexShrink={0} marginLeft={1}>
+                      {clock(`agent-${a.id}`, a.startedAt, C.info)}
+                    </Box>
                   </Box>
                   <Text wrap="truncate-end">
                     <Text color={C.dim}>{'  ↳ '}</Text>

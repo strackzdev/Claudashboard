@@ -506,3 +506,14 @@ test('a file edited in another editor shows as changed without any action', asyn
   expect((await explorerProps(ui)).rows).toEqual([expect.objectContaining({ git: { letter: 'M', tone: 'modified' } })])
   await ui.unmount()
 })
+
+test('the pane stays drawn while a turn runs (its live timer is a valid tree)', async ($, on) => {
+  engine(on)
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  await $.turn.start({ turnId: 't1', text: 'hello' } as never)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...pane(80), surface })
+    expect(await ui.find({ text: /^SESSION$/ })).toBeDefined()
+    await ui.unmount()
+  }
+})

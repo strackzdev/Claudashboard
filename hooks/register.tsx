@@ -749,6 +749,7 @@ export const register: Register = (on, options) => {
           ]
         : [
             { key: '⏎', label: 'open' },
+            { key: 'e', label: 'edit' },
             { key: '⌫', label: 'back' },
             { key: '/', label: 'filter' },
             { key: '.', label: ex.showHidden ? 'hide dotfiles' : 'dotfiles' },

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 — 2026-10-13
+
+- The shortcut sits beside the mode label (`e to edit` / `ctrl+e to view`), and `e edit` is in the file list's hints.
+
 ## 0.3.0 — 2026-10-13
 
 - **Edit files in the pane.** `e` switches to edit mode (from the preview, or from the list on a file); a **VIEW MODE / EDIT MODE / READ ONLY** label sits top right and toggles on click.

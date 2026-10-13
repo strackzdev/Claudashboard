@@ -146,6 +146,14 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
         {props.fileMode ? (
           <Text>
             {'  '}
+            {props.fileMode !== 'readonly' ? (
+              <Text>
+                <Text color={c.accent} bold>
+                  {props.fileMode === 'view' ? 'e' : 'ctrl+e'}
+                </Text>
+                <Text color={c.dim}>{props.fileMode === 'view' ? ' to edit ' : ' to view '}</Text>
+              </Text>
+            ) : null}
             <Text
               backgroundColor={props.fileMode === 'edit' ? c.warn : props.fileMode === 'view' ? c.accent : c.dim}
               color={c.pillFg}

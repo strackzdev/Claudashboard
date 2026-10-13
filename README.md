@@ -101,7 +101,7 @@ The explorer starts at the session's working directory.
 
 ### Editing a file
 
-A label at the top right of the file box shows the mode: **VIEW MODE** (blue), **EDIT MODE** (yellow, and the box border turns yellow too) or **READ ONLY**. Click the label to switch modes, or press `e`.
+A label at the top right of the file box shows the mode: **VIEW MODE** (blue), **EDIT MODE** (yellow, and the box border turns yellow too) or **READ ONLY**. The shortcut is shown right beside it (`e to edit` / `ctrl+e to view`). Click the label to switch modes, or press `e`.
 
 | Key, in edit mode | Does |
 | --- | --- |

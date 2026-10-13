@@ -303,7 +303,9 @@ test('open a file, press e, type, ctrl+s: the file on disk changes and the label
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
   await ui.key({ key: 'return', in: 'explorer' }) // open a.ts
-  expect((await explorerProps(ui)).fileMode).toBe('view')
+  const viewing = await explorerProps(ui)
+  expect(viewing.fileMode).toBe('view')
+  expect(JSON.stringify(viewing.hints)).toContain('"key":"e","label":"edit"')
   await ui.key({ key: 'e', in: 'explorer' })
   expect((await explorerProps(ui)).fileMode).toBe('edit')
   await ui.key({ key: 'end', in: 'explorer' })

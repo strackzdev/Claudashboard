@@ -3,17 +3,26 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Agent, Entry, Explorer, Preview, RepoInfo, Vitals } from '../types'
-import type { Key } from './core'
+import { describeTool, normalizeAgent, stepAgent } from './agents'
 import {
   DEFAULT_EXPLORER,
   DEFAULT_VITALS,
-  EFFORT_LEVEL,
-  fitHeader,
   MAX_DRAWN,
   MAX_PREVIEW_BYTES,
-  baseName,
+  emptyPreview,
+  hasNoteRow,
+  normalize,
+  previewOf,
+  reduceKey,
+  sortEntries,
+  touchedEntries,
+  visibleEntries,
+  windowTop,
+} from './explorer-state'
+import type { Key } from './explorer-state'
+import {
+  EFFORT_LEVEL,
   clipEnd,
-  describeTool,
   fmtAge,
   fmtDuration,
   fmtSize,
@@ -21,29 +30,13 @@ import {
   fmtUsd,
   gauge,
   hasLongContext,
-  joinPath,
   limitLabel,
   modeColorKey,
-  emptyPreview,
-  fitPicture,
-  fromBase64,
-  kindOf,
-  markdownWindow,
-  pngSize,
-  hasNoteRow,
-  normalize,
-  normalizeAgent,
-  parentOf,
   prettyModel,
-  previewOf,
-  reduceKey,
-  relTo,
-  sortEntries,
-  stepAgent,
-  touchedEntries,
-  visibleEntries,
-  windowTop,
-} from './core'
+} from './format'
+import { fitHeader } from './header'
+import { fitPicture, fromBase64, kindOf, markdownWindow, pngSize } from './media'
+import { baseName, joinPath, parentOf, relTo } from './paths'
 import { colFromVisual, displayOf, reduceEdit, textOf, visualCol } from './editor'
 import { countStatus, lineMarks, parseBranch, parsePorcelain, splitText, statusLetter } from './gitdiff'
 import type { LineMark } from './gitdiff'

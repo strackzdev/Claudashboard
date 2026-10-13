@@ -1,6 +1,6 @@
 // Pure logic for STRACKZDEVHUB: subagent cards and what their tool calls do. No `$` here, so it is testable.
-import type { Agent } from '../types'
-import { baseName, toSlash } from './paths'
+import type { Agent } from '../../types'
+import { baseName, toSlash } from '../shared/paths'
 
 /** One line on what a tool call does: `Read middleware.ts`, `Bash npm test`. */
 export function describeTool(tool: string, input: Record<string, unknown>): string {

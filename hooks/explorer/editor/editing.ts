@@ -1,11 +1,11 @@
 // The in-pane editor's lifecycle: entering and leaving edit mode, saving, undo.
 import type { EngineInterface } from 'claude-code'
-import type { Preview } from '../types'
+import type { Preview } from '../../../types'
 import { colFromVisual, reduceEdit, textOf } from './editor'
-import type { UiMessage } from './explorer'
-import { hasNoteRow } from './explorer-state'
-import { loadPreview } from './files'
-import { MAX_UNDO, absOf, changedOnDisk, getExplorer, history, sameLines, saved, setPreview, toKey } from './state'
+import type { UiMessage } from '../client'
+import { hasNoteRow } from '../model'
+import { loadPreview } from '../files'
+import { MAX_UNDO, absOf, changedOnDisk, getExplorer, history, sameLines, saved, setPreview, toKey } from '../../state'
 
 export async function enterEdit($: EngineInterface) {
   await setPreview($, p =>

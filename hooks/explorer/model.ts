@@ -1,22 +1,6 @@
 // Pure logic for STRACKZDEVHUB: the explorer's state, its preview, and its key reducer. No `$` here, so it is testable.
-import type { Entry, Explorer, Preview, Vitals } from '../types'
-import { clamp, clipEnd, fmtSize } from './format'
-
-export const DEFAULT_VITALS: Vitals = {
-  model: '',
-  effort: '',
-  mode: 'default',
-  pct: null,
-  tokens: null,
-  window: null,
-  costUsd: null,
-  limits: [],
-  compactions: 0,
-  turnStartedAt: null,
-  turnCostStart: null,
-  lastTurnMs: null,
-  lastTurnCost: null,
-}
+import type { Entry, Explorer, Preview } from '../../types'
+import { clamp, clipEnd, fmtSize } from '../shared/format'
 
 export const DEFAULT_EXPLORER: Explorer = {
   root: '',
@@ -188,9 +172,4 @@ export function touchedEntries(touched: Record<string, number>): Entry[] {
   return Object.entries(touched)
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([path]) => ({ name: path, path, kind: 'file' as const, size: 0, mtimeMs: 0 }))
-}
-
-/** Fills in what a stored value may lack after an upgrade. */
-export function normalize<T extends object>(base: T, value: unknown): T {
-  return value && typeof value === 'object' ? { ...base, ...(value as Partial<T>) } : base
 }

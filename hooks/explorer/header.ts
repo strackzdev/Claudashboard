@@ -1,5 +1,5 @@
 // Pure logic for STRACKZDEVHUB: fitting the file box's header to the pane's width. No `$` here, so it is testable.
-import { clipMiddle } from './format'
+import { clipMiddle } from '../shared/format'
 
 const SEP = 3 // ' › '
 const crumbsWidth = (parts: string[]) => parts.reduce((n, p) => n + p.length, 0) + SEP * Math.max(0, parts.length - 1)

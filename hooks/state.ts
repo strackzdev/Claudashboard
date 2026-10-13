@@ -2,10 +2,11 @@
 import type { EngineInterface } from 'claude-code'
 import { atom, read, update } from 'claude-code'
 import type { Agent, Explorer, Preview, Vitals } from '../types'
-import { normalizeAgent } from './agents'
-import { DEFAULT_EXPLORER, DEFAULT_VITALS, emptyPreview, normalize } from './explorer-state'
-import type { Key } from './explorer-state'
-import { isAbsolute, joinPath } from './paths'
+import { normalizeAgent } from './agents/agents'
+import { DEFAULT_EXPLORER, emptyPreview } from './explorer/model'
+import { DEFAULT_VITALS } from './session/vitals'
+import type { Key } from './explorer/model'
+import { isAbsolute, joinPath } from './shared/paths'
 
 export const PANE = 'strackzdevhub'
 export const TITLE = 'STRACKZDEVHUB'
@@ -31,19 +32,10 @@ export function updateVitals($: EngineInterface, fn: (v: Vitals) => Vitals) {
   return update($, vitals, x => fn(normalize(DEFAULT_VITALS, x)))
 }
 
-type Usage = {
-  context?: { percent?: number | null; tokens?: number | null; window?: number | null } | null
-  cost?: { usd?: number | null } | null
-  rateLimits?: Array<{ kind: string; percentUsed: number }> | null
+/** Fills in what a stored value may lack after an upgrade. */
+export function normalize<T extends object>(base: T, value: unknown): T {
+  return value && typeof value === 'object' ? { ...base, ...(value as Partial<T>) } : base
 }
-/** The vitals a usage report (from `session.usage()` or `session.measure`) sets. */
-export const usageToVitals = (u: Usage): Partial<Vitals> => ({
-  pct: u.context?.percent ?? null,
-  tokens: u.context?.tokens ?? null,
-  window: u.context?.window ?? null,
-  costUsd: u.cost?.usd ?? null,
-  limits: (u.rateLimits ?? []).map(r => ({ kind: r.kind, pct: r.percentUsed })),
-})
 
 export const sameLines = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((l, i) => l === b[i])
 /** Whether the file on disk is newer than the copy the preview read. */

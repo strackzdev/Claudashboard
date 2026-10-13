@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { clipMiddle } from '../hooks/format'
-import { fitCrumbs, fitHeader } from '../hooks/header'
+import { clipMiddle } from '../../hooks/shared/format'
+import { fitCrumbs, fitHeader } from '../../hooks/explorer/header'
 
 const used = (h: ReturnType<typeof fitHeader>, filter: string | null) =>
   h.crumbs.reduce((n, p) => n + p.length, 0) +

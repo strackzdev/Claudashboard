@@ -2,28 +2,16 @@
 // This module wires the engine's events to the modules that do the work.
 import type { EngineInterface, Register } from 'claude-code'
 import type { Agent, Entry } from '../types'
-import { describeTool, normalizeAgent, stepAgent } from './agents'
-import { editMessage, enterEdit, leaveEdit, saveFile } from './editing'
-import type { UiMessage } from './explorer'
-import { DEFAULT_EXPLORER, reduceKey, visibleEntries } from './explorer-state'
-import { loadDir, loadPreview, noteEdit, poll } from './files'
-import { refreshGit } from './git'
+import { usageToVitals } from './session/vitals'
+import { describeTool, normalizeAgent, stepAgent } from './agents/agents'
+import { editMessage, enterEdit, leaveEdit, saveFile } from './explorer/editor/editing'
+import type { UiMessage } from './explorer/client'
+import { DEFAULT_EXPLORER, reduceKey, visibleEntries } from './explorer/model'
+import { loadDir, loadPreview, noteEdit, poll } from './explorer/files'
+import { refreshGit } from './explorer/git/git'
 import { ONE_DARK, THEME, registerPane } from './pane'
-import { isAbsolute, parentOf, relTo, toSlash } from './paths'
-import {
-  PANE,
-  getExplorer,
-  logged,
-  openPane,
-  paneState,
-  setExplorer,
-  toKey,
-  updateAgents,
-  updateExplorer,
-  updateTouched,
-  updateVitals,
-  usageToVitals,
-} from './state'
+import { isAbsolute, parentOf, relTo, toSlash } from './shared/paths'
+import { PANE, getExplorer, logged, openPane, paneState, setExplorer, toKey, updateAgents, updateExplorer, updateTouched, updateVitals } from './state'
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 

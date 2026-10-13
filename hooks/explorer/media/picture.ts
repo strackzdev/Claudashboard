@@ -1,9 +1,9 @@
 // Pictures in the preview: a PNG as it is, other formats converted to a PNG first.
 import type { EngineInterface } from 'claude-code'
-import type { Preview } from '../types'
-import { fmtSize } from './format'
+import type { Preview } from '../../../types'
+import { fmtSize } from '../../shared/format'
 import { fromBase64, pngSize } from './media'
-import { baseName, toSlash } from './paths'
+import { baseName, toSlash } from '../../shared/paths'
 
 /** The external tool that turns a JPEG, GIF, WebP or BMP into a PNG, found once: ImageMagick, then ffmpeg. */
 let converter: string[] | null | undefined

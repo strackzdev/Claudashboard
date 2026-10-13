@@ -1,15 +1,15 @@
 // Pure logic for STRACKZDEVHUB: the props the explorer client draws, from the stored state. No `$` here, so it is testable.
-import type { Explorer } from '../types'
-import { displayOf, visualCol } from './editor'
-import type { ExplorerProps, GutterMark, Hint, Palette } from './explorer'
-import { MAX_DRAWN, visibleEntries, windowTop } from './explorer-state'
-import { clipEnd, fmtAge, fmtSize } from './format'
-import type { Base } from './git'
-import type { LineMark } from './gitdiff'
-import { lineMarks, statusLetter } from './gitdiff'
+import type { Explorer } from '../../types'
+import { displayOf, visualCol } from './editor/editor'
+import type { ExplorerProps, GutterMark, Hint, Palette } from './client'
+import { MAX_DRAWN, visibleEntries, windowTop } from './model'
+import { clipEnd, fmtAge, fmtSize } from '../shared/format'
+import type { Base } from './git/git'
+import type { LineMark } from './git/gitdiff'
+import { lineMarks, statusLetter } from './git/gitdiff'
 import { fitHeader } from './header'
-import { markdownWindow } from './media'
-import { baseName } from './paths'
+import { markdownWindow } from './media/media'
+import { baseName } from '../shared/paths'
 
 /** One gutter cell: a bar for an added or modified line, a low bar where lines were deleted. */
 function gutterMark(m: LineMark): GutterMark | null {

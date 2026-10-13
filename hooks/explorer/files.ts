@@ -1,12 +1,12 @@
 // The explorer's I/O: folder listings, the preview's file, and the live refresh.
 import type { EngineInterface } from 'claude-code'
-import type { Entry, Explorer, Preview } from '../types'
-import { MAX_PREVIEW_BYTES, emptyPreview, previewOf, sortEntries, touchedEntries, visibleEntries } from './explorer-state'
-import { bases, fetchBase, gitStatusOf, opened } from './git'
-import { kindOf } from './media'
-import { joinPath, parentOf, relTo, toSlash } from './paths'
-import { loadPicture } from './picture'
-import { absOf, changedOnDisk, getExplorer, logged, getTouched, history, paneState, saved, setPreview, updateExplorer, updateTouched } from './state'
+import type { Entry, Explorer, Preview } from '../../types'
+import { MAX_PREVIEW_BYTES, emptyPreview, previewOf, sortEntries, touchedEntries, visibleEntries } from './model'
+import { bases, fetchBase, gitStatusOf, opened } from './git/git'
+import { kindOf } from './media/media'
+import { joinPath, parentOf, relTo, toSlash } from '../shared/paths'
+import { loadPicture } from './media/picture'
+import { absOf, changedOnDisk, getExplorer, logged, getTouched, history, paneState, saved, setPreview, updateExplorer, updateTouched } from '../state'
 
 /** Whether two listings show the same thing: names, sizes, times and git letters. */
 const sameListing = (a: Entry[], b: Entry[]) =>

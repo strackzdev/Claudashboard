@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { colFromVisual, reduceEdit, textOf, visualCol } from '../hooks/editor'
-import { emptyPreview, previewOf } from '../hooks/explorer-state'
+import { colFromVisual, reduceEdit, textOf, visualCol } from '../../../hooks/explorer/editor/editor'
+import { emptyPreview, previewOf } from '../../../hooks/explorer/model'
 
 const doc = (lines: string[], row = 0, col = 0) => emptyPreview('a.ts', { lines, row, col, mode: 'edit' })
 const type = (p: ReturnType<typeof doc>, ...keys: string[]) => keys.reduce((x, key) => reduceEdit(x, { key }, 10).p, p)

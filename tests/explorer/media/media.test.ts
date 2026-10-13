@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { fitPicture, fromBase64, kindOf, markdownWindow, pngSize } from '../hooks/media'
+import { fitPicture, fromBase64, kindOf, markdownWindow, pngSize } from '../../../hooks/explorer/media/media'
 
 test('files show by kind: markdown, pictures, the rest as code', () => {
   expect(kindOf('README.md')).toBe('markdown')

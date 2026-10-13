@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { countStatus, diffLines, lineMarks, parseBranch, parsePorcelain, statusLetter } from '../hooks/gitdiff'
+import { countStatus, diffLines, lineMarks, parseBranch, parsePorcelain, statusLetter } from '../../../hooks/explorer/git/gitdiff'
 
 test('a line diff tells added, modified and deleted lines apart', () => {
   const d = diffLines(['a', 'b', 'c', 'd'], ['a', 'B', 'c', 'x', 'd'])

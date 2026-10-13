@@ -1,9 +1,9 @@
 // git for the explorer: the status letters and project bar, and what the open file's gutter compares against.
 import type { EngineInterface } from 'claude-code'
-import type { Entry, RepoInfo } from '../types'
+import type { Entry, RepoInfo } from '../../../types'
 import { countStatus, parseBranch, parsePorcelain, splitText } from './gitdiff'
-import { baseName, parentOf, relTo } from './paths'
-import { absOf, bumpGitTick, getExplorer, sameLines, updateExplorer } from './state'
+import { baseName, parentOf, relTo } from '../../shared/paths'
+import { absOf, bumpGitTick, getExplorer, sameLines, updateExplorer } from '../../state'
 
 /** What each open file is compared against: git's HEAD and index, or (outside git) the text as first opened. */
 export type Base = { repo: boolean; head: string[]; index: string[] }

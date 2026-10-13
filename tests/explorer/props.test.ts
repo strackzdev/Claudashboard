@@ -1,9 +1,9 @@
 import { expect, test } from 'claude-code/testing'
 
-import { explorerProps } from '../hooks/explorer-props'
-import { DEFAULT_EXPLORER, emptyPreview } from '../hooks/explorer-state'
-import type { Palette } from '../hooks/explorer'
-import type { Explorer } from '../types'
+import { explorerProps } from '../../hooks/explorer/props'
+import { DEFAULT_EXPLORER, emptyPreview } from '../../hooks/explorer/model'
+import type { Palette } from '../../hooks/explorer/client'
+import type { Explorer } from '../../types'
 
 const colors = {} as Palette
 const props = (ex: Partial<Explorer>, over: Partial<Parameters<typeof explorerProps>[0]> = {}) =>

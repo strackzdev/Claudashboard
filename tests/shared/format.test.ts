@@ -1,8 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 
-import { windowTop } from '../hooks/explorer-state'
-import { fmtAge, gauge, prettyModel } from '../hooks/format'
-import { isAbsolute, parentOf, relTo, toSlash } from '../hooks/paths'
+import { windowTop } from '../../hooks/explorer/model'
+import { fmtAge, gauge, prettyModel } from '../../hooks/shared/format'
+import { isAbsolute, parentOf, relTo, toSlash } from '../../hooks/shared/paths'
 
 test('paths and formatting', () => {
   expect(relTo('/p', '/p/src/a.ts')).toBe('src/a.ts')

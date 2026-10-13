@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { DEFAULT_EXPLORER, emptyPreview, previewOf, reduceKey, sortEntries, visibleEntries } from '../hooks/explorer-state'
-import type { Entry, Explorer } from '../types'
+import { DEFAULT_EXPLORER, emptyPreview, previewOf, reduceKey, sortEntries, visibleEntries } from '../../hooks/explorer/model'
+import type { Entry, Explorer } from '../../types'
 
 const file = (path: string, kind: Entry['kind'] = 'file'): Entry => ({
   name: path.slice(path.lastIndexOf('/') + 1),

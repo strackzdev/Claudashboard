@@ -1,11 +1,11 @@
 // The pane's drawing: three boxes from the stored state, the explorer drawn by its client module.
 import type { On } from 'claude-code'
-import type { Palette } from './explorer'
-import { EFFORT_LEVEL, clipEnd, fmtDuration, fmtTokens, fmtUsd, gauge, hasLongContext, limitLabel, modeColorKey, prettyModel } from './format'
-import { bases } from './git'
-import { explorerProps } from './explorer-props'
-import { fitPicture } from './media'
-import { baseName } from './paths'
+import type { Palette } from './explorer/client'
+import { EFFORT_LEVEL, clipEnd, fmtDuration, fmtTokens, fmtUsd, gauge, hasLongContext, limitLabel, modeColorKey, prettyModel } from './shared/format'
+import { bases } from './explorer/git/git'
+import { explorerProps } from './explorer/props'
+import { fitPicture } from './explorer/media/media'
+import { baseName } from './shared/paths'
 import { PANE, getAgents, getExplorer, getTouched, getVitals, paneState, readGitTick, saved } from './state'
 
 export type Colors = Palette & { ok: string; bad: string; info: string; purple: string; frame: string }
@@ -251,7 +251,7 @@ export const registerPane = (on: On, C: Colors) => {
           </Box>
         ) : null}
         {hasClient ? (
-          <els.Client key="explorer" module="./explorer.tsx" props={props} width={inner} height={room + 3} />
+          <els.Client key="explorer" module="./explorer/client.tsx" props={props} width={inner} height={room + 3} />
         ) : (
           <Text color={C.dim}>The file explorer needs a surface that runs client modules (the terminal does).</Text>
         )}

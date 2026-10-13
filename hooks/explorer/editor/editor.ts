@@ -1,8 +1,8 @@
 // Pure logic for the in-pane editor: keys against the text, cursor and display columns. No `$` here.
-import type { Preview } from '../types'
-import { hasNoteRow } from './explorer-state'
-import type { Key } from './explorer-state'
-import { clamp } from './format'
+import type { Preview } from '../../../types'
+import { hasNoteRow } from '../model'
+import type { Key } from '../model'
+import { clamp } from '../../shared/format'
 
 /** Cells a tab takes on screen; the cursor's display column counts it so. */
 export const TAB = 2

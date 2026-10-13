@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { describeTool, normalizeAgent, stepAgent } from '../hooks/agents'
+import { describeTool, normalizeAgent, stepAgent } from '../../hooks/agents/agents'
 
 test('an agent stored by an older version still has every field', () => {
   const a = normalizeAgent({ id: 'x' })

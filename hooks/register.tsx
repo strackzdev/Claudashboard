@@ -21,6 +21,7 @@ import {
   limitLabel,
   modeColorKey,
   normalize,
+  normalizeAgent,
   parentOf,
   prettyModel,
   previewOf,
@@ -84,7 +85,10 @@ const THEME: Colors = {
 const getVitals = async ($: EngineInterface) => normalize(DEFAULT_VITALS, await read($, vitals))
 const getExplorer = async ($: EngineInterface) => normalize(DEFAULT_EXPLORER, await read($, explorer))
 const getTouched = async ($: EngineInterface): Promise<Record<string, number>> => (await read($, touched)) ?? {}
-const getAgents = async ($: EngineInterface): Promise<Agent[]> => (Array.isArray(await read($, agents)) ? await read($, agents) : [])
+const getAgents = async ($: EngineInterface): Promise<Agent[]> => {
+  const list = await read($, agents)
+  return Array.isArray(list) ? list.map(a => normalizeAgent(a)) : []
+}
 
 const openPane = ($: EngineInterface) => $.ui.open({ id: PANE, title: TITLE, columns: 76, rows: 30 })
 
@@ -161,7 +165,10 @@ async function initExplorer($: EngineInterface, showHidden: boolean) {
   const root = await $.session.cwd()
   const ex = await getExplorer($)
   // Keep where the person was across reloads; start over when the session moved to another folder.
-  if (ex.root === root) return loadDir($, ex.dir)
+  if (ex.root === root) {
+    await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), showHidden }))
+    return loadDir($, ex.dir)
+  }
   await update($, explorer, () => ({ ...DEFAULT_EXPLORER, root, showHidden }))
   return loadDir($, '')
 }
@@ -171,11 +178,11 @@ async function refreshUsage($: EngineInterface) {
   if (!u) return
   await update($, vitals, x => ({
     ...normalize(DEFAULT_VITALS, x),
-    pct: u.context.percent ?? null,
-    tokens: u.context.tokens ?? null,
-    window: u.context.window ?? null,
+    pct: u.context?.percent ?? null,
+    tokens: u.context?.tokens ?? null,
+    window: u.context?.window ?? null,
     costUsd: u.cost?.usd ?? null,
-    limits: u.rateLimits.map(r => ({ kind: r.kind, pct: r.percentUsed })),
+    limits: (u.rateLimits ?? []).map(r => ({ kind: r.kind, pct: r.percentUsed })),
   }))
 }
 
@@ -197,6 +204,26 @@ async function refreshModel($: EngineInterface) {
   if (model) await update($, vitals, x => ({ ...normalize(DEFAULT_VITALS, x), model }))
 }
 
+/** Adds a card for a spawned subagent. */
+async function noteSpawn(
+  $: EngineInterface,
+  e: { name?: string; subagentType?: string; description?: string; background?: boolean },
+  id: string,
+  model: string | undefined,
+) {
+  const type = e.subagentType ?? 'agent'
+  const agent: Agent = normalizeAgent({
+    id,
+    name: e.name ?? type.split(':').pop() ?? 'agent',
+    type,
+    model: model ?? '',
+    task: e.description ?? '',
+    startedAt: await $.clock.now(),
+    isBackground: e.background === true,
+  })
+  await update($, agents, list => [...(list ?? []).filter(a => a.id !== agent.id), agent].slice(-24))
+}
+
 export const register: Register = (on, options) => {
   const C = options.palette === 'theme' ? THEME : ONE_DARK
   const showHiddenDefault = options.showHidden === true
@@ -207,7 +234,7 @@ export const register: Register = (on, options) => {
       description: 'STRACKZDEVHUB: open or close the hub, jump the explorer to a folder, or reset it',
       argumentHint: '[close|cd <path>|reset]',
     })
-    await Promise.all([refreshUsage($), refreshModel($)])
+    await Promise.all([refreshUsage($), refreshModel($)]).catch(() => undefined)
     await initExplorer($, showHiddenDefault).catch(() => undefined)
     if (options.openOnStart !== false) void openPane($).catch(() => undefined)
     return next(e)
@@ -235,10 +262,13 @@ export const register: Register = (on, options) => {
     if (verb === 'cd') {
       const ex = await getExplorer($)
       const target = args.slice(2).trim().replace(/^\.\/?/, '').replace(/\/+$/, '')
-      const rel = target.startsWith('/') ? relTo(ex.root, target) : target
-      if (rel.startsWith('/')) return { text: `${target} is outside ${ex.root}.` }
+      const root = ex.root.replace(/\/+$/, '')
+      const rel = target === root ? '' : target.startsWith('/') ? relTo(root, target) : target
+      if (rel.startsWith('/') || rel.split('/').includes('..')) return { text: `${target} is outside ${ex.root}.` }
       await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), onlyTouched: false, filter: '' }))
       await loadDir($, rel)
+      const after = await getExplorer($)
+      if (after.error) return { text: `STRACKZDEVHUB: ${after.error}` }
       await openPane($)
       return { text: `STRACKZDEVHUB explorer at ./${rel}` }
     }
@@ -279,21 +309,8 @@ export const register: Register = (on, options) => {
   on('agent.spawn', async ($, e, next) => {
     const started = await next(e)
     if (started.deny !== undefined || !started.agentId) return started
-    const agent: Agent = {
-      id: started.agentId,
-      name: e.name ?? e.subagentType.split(':').pop() ?? 'agent',
-      type: e.subagentType,
-      model: started.model,
-      task: e.description,
-      startedAt: await $.clock.now(),
-      steps: 0,
-      ctx: 0,
-      out: 0,
-      tools: 0,
-      lastTool: '',
-      isBackground: e.background,
-    }
-    await update($, agents, list => [...(list ?? []).filter(a => a.id !== agent.id), agent].slice(-24))
+    // Bookkeeping only: a failure here must never fail the Agent call.
+    await noteSpawn($, e, started.agentId, started.model).catch(() => undefined)
     return started
   })
 
@@ -323,11 +340,11 @@ export const register: Register = (on, options) => {
   on('session.measure', async ($, e, next) => {
     await update($, vitals, x => ({
       ...normalize(DEFAULT_VITALS, x),
-      pct: e.context.percent ?? null,
-      tokens: e.context.tokens ?? null,
-      window: e.context.window ?? null,
+      pct: e.context?.percent ?? null,
+      tokens: e.context?.tokens ?? null,
+      window: e.context?.window ?? null,
       costUsd: e.cost?.usd ?? null,
-      limits: e.rateLimits.map(r => ({ kind: r.kind, pct: r.percentUsed })),
+      limits: (e.rateLimits ?? []).map(r => ({ kind: r.kind, pct: r.percentUsed })),
     }))
     return next(e)
   })
@@ -371,6 +388,11 @@ export const register: Register = (on, options) => {
       }
       return {}
     }
+    if (d.k === 'crumb') {
+      if (ex.isFiltering || ex.filter) await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), isFiltering: false, filter: '', cursor: 0 }))
+      await goUp($)
+      return {}
+    }
     if (d.k !== 'key' || typeof d.key !== 'string') return {}
     const { ex: nextEx, effect } = reduceKey(ex, { key: d.key, ...(d.ctrl ? { ctrl: true } : {}), ...(d.meta ? { meta: true } : {}) }, room)
     if (nextEx !== ex) await update($, explorer, () => nextEx)
@@ -388,7 +410,7 @@ export const register: Register = (on, options) => {
     const [v, ex, t, list, now] = await Promise.all([getVitals($), getExplorer($), getTouched($), getAgents($), $.clock.now()])
     const W = Math.max(40, e.props.bodyColumns)
     const inner = W - 4 // a section's round border and its one-cell padding each side
-    const bodyRows = Math.max(14, e.props.scroll.bodyRows)
+    const bodyRows = Math.max(8, e.props.scroll.bodyRows)
 
     const clock = (key: string, since: number, color: string) =>
       hasClient ? (
@@ -430,7 +452,7 @@ export const register: Register = (on, options) => {
       turn,
       <Box flexDirection="column">
         <Box flexDirection="row" justifyContent="space-between">
-          <Text>
+          <Text wrap="truncate-end">
             <Text backgroundColor={C.accent} color={C.pillFg} bold>
               {` ${prettyModel(v.model)} `}
             </Text>
@@ -444,7 +466,7 @@ export const register: Register = (on, options) => {
           </Text>
         </Box>
         <Box flexDirection="row" justifyContent="space-between">
-          <Text>
+          <Text wrap="truncate-end">
             <Text color={C.dim}>{'ctx  '}</Text>
             <Text color={ctxColor}>{gauge(pct, gaugeW)}</Text>
             <Text color={C.text} bold>
@@ -461,7 +483,7 @@ export const register: Register = (on, options) => {
           </Text>
         </Box>
         {v.limits.length > 0 ? (
-          <Text>
+          <Text wrap="truncate-end">
             <Text color={C.dim}>{'lim  '}</Text>
             {v.limits.slice(0, 3).map(l => (
               <Text>
@@ -477,7 +499,10 @@ export const register: Register = (on, options) => {
     const vitalsRows = 2 + 1 + 2 + (v.limits.length > 0 ? 1 : 0)
 
     // ---- agents: only while some run; each leaves when it finishes
-    const shown = list.slice(-MAX_AGENTS)
+    // Agents give way before the file list drops under 3 rows.
+    const spare = bodyRows - vitalsRows - 5 - 3 - 3
+    const fit = Math.max(1, Math.min(MAX_AGENTS, Math.floor((spare - 1) / 2)))
+    const shown = list.slice(-fit)
     const more = list.length - shown.length
     const agentsBox =
       list.length === 0
@@ -502,7 +527,7 @@ export const register: Register = (on, options) => {
                   </Box>
                   <Text wrap="truncate-end">
                     <Text color={C.dim}>{'  ↳ '}</Text>
-                    <Text color={C.text}>{clipEnd(a.task, Math.max(10, inner - 30))}</Text>
+                    <Text color={C.text}>{clipEnd(a.task ?? '', Math.max(10, inner - 30))}</Text>
                     {a.lastTool ? <Text color={C.dim}>{`  ⟶ ${a.lastTool}`}</Text> : null}
                   </Text>
                 </Box>
@@ -567,7 +592,7 @@ export const register: Register = (on, options) => {
       props = {
         mode: 'list',
         crumbs,
-        counter: rows.length ? `${cursor + 1}/${rows.length}` : '',
+        counter: ex.error && rows.length ? `⚠ ${clipEnd(ex.error, 30)}` : rows.length ? `${cursor + 1}/${rows.length}` : '',
         filter: ex.isFiltering || ex.filter ? `${ex.filter}${ex.isFiltering ? '▏' : ''}` : null,
         hints,
         rows: rows.slice(top, top + room).map((r, i) => ({
@@ -583,7 +608,7 @@ export const register: Register = (on, options) => {
         width: inner,
         code: null,
         note: null,
-        empty: ex.error ?? (rows.length === 0 ? (ex.onlyTouched ? 'No files touched yet this session.' : ex.filter ? 'Nothing matches the filter.' : 'Empty folder.') : null),
+        empty: rows.length > 0 ? null : ex.error ?? (rows.length === 0 ? (ex.onlyTouched ? 'No files touched yet this session.' : ex.filter ? 'Nothing matches the filter.' : 'Empty folder.') : null),
         colors: C,
       }
     }

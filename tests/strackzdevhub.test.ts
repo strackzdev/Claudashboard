@@ -3,6 +3,7 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import {
   DEFAULT_EXPLORER,
+  normalizeAgent,
   describeTool,
   stepAgent,
   fmtAge,
@@ -72,6 +73,10 @@ test('in the preview, keys scroll within the file and Backspace goes back', () =
   expect(reduceKey(s, { key: 'end' }, 10).ex.preview?.top).toBe(40)
   expect(reduceKey(s, { key: 'up' }, 10).ex.preview?.top).toBe(0)
   expect(reduceKey(s, { key: 'backspace' }, 10).effect).toEqual({ kind: 'up' })
+  expect(reduceKey(s, { key: 'h' }, 10).effect).toEqual({ kind: 'up' })
+  // A note takes a row: the end scrolls one further so the last line shows.
+  const noted = ex({ preview: { path: 'src/a.ts', lines, top: 0, note: 'n' } })
+  expect(reduceKey(noted, { key: 'end' }, 10).ex.preview?.top).toBe(41)
   expect(reduceKey(s, { key: '@' }, 10).effect).toEqual({ kind: 'mention', path: 'src/a.ts' })
 })
 
@@ -80,6 +85,12 @@ test('previews refuse binaries and huge files, and strip control characters', ()
   expect(previewOf('x.bin', 'ab\u0000cd', 5).note).toContain('binary')
   expect(previewOf('big', '', 5_000_000).note).toContain('too large')
   expect(previewOf('a.ts', 'one\r\ntwo\u001b[0m\n', 10).lines).toEqual(['one', 'two[0m'])
+})
+
+test('an agent stored by an older version still has every field', () => {
+  const a = normalizeAgent({ id: 'x' })
+  expect(a.task).toBe('')
+  expect(a.steps).toBe(0)
 })
 
 test('paths and formatting', () => {

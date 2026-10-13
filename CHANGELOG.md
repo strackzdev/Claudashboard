@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1 — 2026-10-13
+
+- Renamed to **STRACKZDEVHUB**; command `/strackzdevhub`.
+- Agent tracking can never fail an Agent call; missing usage data no longer stops the pane opening.
+- `h` and `q` go back from the preview; the last line is reachable when a note shows; clicks stay aligned when an error is shown.
+- Breadcrumb click while filtering goes back instead of erasing a character.
+- Agents section shrinks to fit short panes; vitals rows truncate instead of wrapping.
+- `/strackzdevhub cd` refuses `..`, accepts the root's absolute path, and reports a missing folder.
+- `showHidden` from `/config` applies on the next load.
+
 ## 0.2.0 — 2026-10-13
 
 - Three outlined sections: **Session**, **Agents**, **Files**.

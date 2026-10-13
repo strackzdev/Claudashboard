@@ -6,7 +6,7 @@
 ╭──────────────────────────────────────────────────────╮
 │ SESSION                                  ● 0:37      │
 │  opus 5.5  1M  effort ●●●○○ high               auto  │
-│ ctx  ▰▰▰▰▰▱▱▱▱▱ 51%  102k / 1M  ⟲1      $1.84 +$0.21 │
+│ ctx  ▰▰▰▰▰▱▱▱▱▱ 51%  102k / 1.0M  ⟲1    $1.84 +$0.21 │
 │ lim  5h ▰▰▱▱▱▱ 38%    7d ▰▱▱▱▱▱ 12%                  │
 ╰──────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────╮
@@ -87,12 +87,12 @@ The explorer starts at the session's working directory.
 | Key | In the list | In the preview |
 | --- | --- | --- |
 | `↑` `↓` / `k` `j` | move | scroll |
-| `PgUp` `PgDn` | page | page |
-| `Home` `End` | first / last | — |
+| `PgUp` `PgDn` | page | page (`Space` too) |
+| `Home` `End` | first / last | top / end |
 | `g` `G` | — | top / end |
 | `⏎` `→` `l` | open | — |
-| `⌫` `←` `h` | parent folder (clears a filter first) | back to the list |
-| `/` | filter by name as you type | — |
+| `⌫` `←` `h` | parent folder (clears a filter first) | back to the list (`q` too) |
+| `/` | filter by name as you type (`⏎` or `Tab` to finish) | — |
 | `.` | show / hide dotfiles | — |
 | `t` | only files Claude touched this session | — |
 | `r` | refresh | — |
@@ -106,7 +106,7 @@ Files Claude edited or created this session are marked **✎** in yellow, and ne
 | --- | --- |
 | `/strackzdevhub` | open the hub |
 | `/strackzdevhub close` | close it |
-| `/strackzdevhub cd <path>` | jump the explorer to a folder, relative to the working directory or absolute inside it |
+| `/strackzdevhub cd <path>` | jump the explorer to a folder: relative to the working directory, or an absolute path inside it (`..` is refused) |
 | `/strackzdevhub reset` | clear the touched files and agents, and move the explorer back to the root |
 
 ## Configure

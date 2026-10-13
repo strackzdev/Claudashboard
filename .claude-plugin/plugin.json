@@ -1,6 +1,6 @@
 {
   "name": "strackzdevhub",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "STRACKZDEVHUB: a clean hub pane for Claude Code. Session vitals (model, effort, context, cost, rate limits), live subagent cards, and a mouse + keyboard file explorer with in-pane preview",
   "author": {
     "name": "José Pinto"

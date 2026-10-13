@@ -1,5 +1,5 @@
 // Pure logic for STRACKZDEVHUB: formatting, paths, and the explorer's key reducer. No `$` here, so it is testable.
-import type { Entry, Explorer, Preview, Vitals } from '../types'
+import type { Agent, Entry, Explorer, Preview, Vitals } from '../types'
 
 export const DEFAULT_VITALS: Vitals = {
   model: '',
@@ -164,9 +164,10 @@ export function reduceKey(ex: Explorer, k: Key, room: number): { ex: Explorer; e
 
   if (ex.preview) {
     const p = ex.preview
-    const last = Math.max(0, p.lines.length - room)
+    // A note above the code takes one of the rows.
+    const last = Math.max(0, p.lines.length - (p.note ? room - 1 : room))
     const scroll = (top: number) => ({ ex: { ...ex, preview: { ...p, top: clamp(top, 0, last) } }, effect: null })
-    if (key === 'backspace' || key === 'left' || key === 'q') return { ex, effect: { kind: 'up' } }
+    if (key === 'backspace' || key === 'left' || key === 'h' || key === 'q') return { ex, effect: { kind: 'up' } }
     if (key === 'down' || key === 'j') return scroll(p.top + 1)
     if (key === 'up' || key === 'k') return scroll(p.top - 1)
     if (key === 'pagedown' || key === 'space' || key === ' ') return scroll(p.top + page)
@@ -260,4 +261,22 @@ export function modeColorKey(mode: string): 'ok' | 'info' | 'purple' | 'bad' | '
   if (mode === 'acceptEdits') return 'purple'
   if (mode === 'bypassPermissions') return 'bad'
   return 'dim'
+}
+
+/** A stored or partial agent with every field present, so a card from an older version still draws. */
+export function normalizeAgent(a: Partial<Agent> & { id: string }): Agent {
+  return {
+    name: 'agent',
+    type: 'agent',
+    model: '',
+    task: '',
+    startedAt: 0,
+    steps: 0,
+    ctx: 0,
+    out: 0,
+    tools: 0,
+    lastTool: '',
+    isBackground: false,
+    ...a,
+  }
 }

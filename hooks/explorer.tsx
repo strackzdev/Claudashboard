@@ -85,8 +85,8 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
     surface.onPointer(p => {
       if (p.type !== 'down' || p.button !== 'left') return
       const cur = ref.props
-      // The breadcrumb goes back, as Backspace does.
-      if (p.y === 0) return surface.post({ k: 'key', key: 'backspace', ctrl: false, meta: false, room: cur.room })
+      // The breadcrumb goes back: out of the preview, or up a folder (a filter is dropped first).
+      if (p.y === 0) return surface.post({ k: 'crumb', room: cur.room })
       const i = p.y - HEAD
       if (cur.mode === 'list' && i >= 0 && i < cur.rows.length) surface.post({ k: 'click', index: cur.top + i, room: cur.room })
     })

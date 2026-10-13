@@ -512,6 +512,19 @@ test('a file edited in another editor shows as changed without any action', asyn
   await ui.unmount()
 })
 
+test('a live refresh keeps the cursor on the same file while dotfiles are hidden', async ($, on) => {
+  const clock = mock.clock(on)
+  const files = disk(on, { '/w/.env': 'x', '/w/a.ts': 'a', '/w/b.ts': 'b' })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await ui.key({ key: 'down', in: 'explorer' }) // onto b.ts
+  files.writeOutside('/w/c.ts', 'c')
+  await clock.advance(3000)
+  const rows = (await explorerProps(ui)).rows as Array<{ label: string; isSelected: boolean }>
+  expect(rows.find(r => r.isSelected)?.label).toBe('b.ts')
+  await ui.unmount()
+})
+
 test('the pane stays drawn while a turn runs (its live timer is a valid tree)', async ($, on) => {
   engine(on)
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))

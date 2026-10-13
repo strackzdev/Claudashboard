@@ -234,10 +234,12 @@ async function poll($: EngineInterface) {
       const cur = normalize(DEFAULT_EXPLORER, x)
       if (cur.dir !== ex.dir) return cur
       // Keep the cursor on the same entry when files come and go.
-      const at = cur.entries[cur.cursor]?.path
+      // The cursor indexes the visible rows, not every entry.
+      const at = visibleEntries(cur)[cur.cursor]?.path
       const next = { ...cur, entries, repo }
-      const idx = at ? visibleEntries(next).findIndex(e => e.path === at) : -1
-      return { ...next, cursor: idx >= 0 ? idx : Math.min(cur.cursor, Math.max(0, entries.length - 1)) }
+      const rows = visibleEntries(next)
+      const idx = at ? rows.findIndex(e => e.path === at) : -1
+      return { ...next, cursor: idx >= 0 ? idx : Math.min(cur.cursor, Math.max(0, rows.length - 1)) }
     })
   } finally {
     isPolling = false

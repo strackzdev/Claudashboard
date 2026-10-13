@@ -599,7 +599,7 @@ export const register: Register = (on, options) => {
             {hasLongContext(v.model) ? <Text color={C.accent}> 1M</Text> : null}
             <Text color={C.dim}>{'  effort '}</Text>
             <Text color={C.purple}>{'●'.repeat(effortN) + '○'.repeat(Math.max(0, 5 - effortN))}</Text>
-            <Text color={C.text}>{` ${v.effort || '—'}`}</Text>
+            {v.effort ? <Text color={C.text}>{` ${v.effort}`}</Text> : <Text color={C.dim}> after 1st reply</Text>}
           </Text>
           <Text color={modeColor} bold>
             {v.mode}
@@ -609,9 +609,13 @@ export const register: Register = (on, options) => {
           <Text wrap="truncate-end">
             <Text color={C.dim}>{'ctx  '}</Text>
             <Text color={ctxColor}>{gauge(pct, gaugeW)}</Text>
-            <Text color={C.text} bold>
-              {v.pct === null ? ' —' : ` ${Math.round(pct)}%`}
-            </Text>
+            {v.pct === null ? (
+              <Text color={C.dim}> waiting for the 1st reply</Text>
+            ) : (
+              <Text color={C.text} bold>
+                {` ${Math.round(pct)}%`}
+              </Text>
+            )}
             {v.tokens !== null && v.window ? <Text color={C.dim}>{`  ${fmtTokens(v.tokens)} / ${fmtTokens(v.window)}`}</Text> : null}
             {v.compactions > 0 ? <Text color={C.dim}>{`  ⟲${v.compactions}`}</Text> : null}
           </Text>

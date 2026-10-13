@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.4 — 2026-10-13
+
+- Before the first reply, the Session box says `waiting for the 1st reply` / `after 1st reply` instead of bare dashes: Claude Code reports context and effort only once a reply arrives.
+
 ## 0.3.3 — 2026-10-13
 
 - Responsive file box header: the path folds its middle folders (`strackz › … › CODEOWNERS`), then cuts the name from the middle keeping its extension; the mode label always stays (short `VIEW`/`EDIT`/`RO` when narrow); the shortcut and `● modified` give way first.

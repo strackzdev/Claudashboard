@@ -10,3 +10,4 @@ jobs:
           node-version: 22
       - run: npm install -g @anthropic-ai/claude-code
       - run: claude plugin test .
+      - run: npx -y prettier@3 --check "hooks/**/*.{ts,tsx}" "tests/**/*.ts"

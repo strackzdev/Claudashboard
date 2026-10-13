@@ -10,7 +10,20 @@ import { loadDir, loadPreview, noteEdit, poll } from './files'
 import { refreshGit } from './git'
 import { ONE_DARK, THEME, registerPane } from './pane'
 import { isAbsolute, parentOf, relTo, toSlash } from './paths'
-import { PANE, getExplorer, logged, openPane, paneState, setExplorer, toKey, updateAgents, updateExplorer, updateTouched, updateVitals, usageToVitals } from './state'
+import {
+  PANE,
+  getExplorer,
+  logged,
+  openPane,
+  paneState,
+  setExplorer,
+  toKey,
+  updateAgents,
+  updateExplorer,
+  updateTouched,
+  updateVitals,
+  usageToVitals,
+} from './state'
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 
@@ -137,7 +150,9 @@ export const register: Register = (on, options) => {
     }
     if (verb === 'cd') {
       const ex = await getExplorer($)
-      const target = toSlash(args.slice(2).trim()).replace(/^\.\/?/, '').replace(/\/+$/, '')
+      const target = toSlash(args.slice(2).trim())
+        .replace(/^\.\/?/, '')
+        .replace(/\/+$/, '')
       const root = ex.root.replace(/\/+$/, '')
       const rel = target === root ? '' : isAbsolute(target) ? relTo(root, target) : target
       if (isAbsolute(rel) || rel.split('/').includes('..')) return { text: `${target} is outside ${ex.root}.` }

@@ -48,7 +48,11 @@ export const usageToVitals = (u: Usage): Partial<Vitals> => ({
 export const sameLines = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((l, i) => l === b[i])
 /** Whether the file on disk is newer than the copy the preview read. */
 export const changedOnDisk = (st: { mtimeMs: number } | null, p: Preview) => Boolean(st && p.mtimeMs && Math.abs(st.mtimeMs - p.mtimeMs) > 1)
-export const toKey = (d: { key: string; ctrl?: boolean; meta?: boolean }): Key => ({ key: d.key, ...(d.ctrl ? { ctrl: true } : {}), ...(d.meta ? { meta: true } : {}) })
+export const toKey = (d: { key: string; ctrl?: boolean; meta?: boolean }): Key => ({
+  key: d.key,
+  ...(d.ctrl ? { ctrl: true } : {}),
+  ...(d.meta ? { meta: true } : {}),
+})
 
 /** Undo steps per file, newest last, and the text as last read or saved; the module's own, so a reload drops them. */
 export const history = new Map<string, Array<Pick<Preview, 'lines' | 'row' | 'col'>>>()

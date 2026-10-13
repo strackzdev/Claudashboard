@@ -10,7 +10,11 @@ let converter: string[] | null | undefined
 
 async function findConverter($: EngineInterface): Promise<string[] | null> {
   if (converter !== undefined) return converter
-  for (const argv of [['magick', '-version'], ['convert', '-version'], ['ffmpeg', '-version']]) {
+  for (const argv of [
+    ['magick', '-version'],
+    ['convert', '-version'],
+    ['ffmpeg', '-version'],
+  ]) {
     const r = await $.process.run(argv, { timeoutMs: 3000 }).catch(() => null)
     if (r && r.exitCode === 0 && (argv[0] !== 'convert' || r.stdout.includes('ImageMagick'))) {
       converter = argv.slice(0, 1)

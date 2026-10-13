@@ -14,7 +14,7 @@ import { baseName } from './paths'
 /** One gutter cell: a bar for an added or modified line, a low bar where lines were deleted. */
 function gutterMark(m: LineMark): GutterMark | null {
   if (!m.layer) return null
-  return { glyph: m.change ? '▌' : '▁', tone: m.layer === 'unsaved' ? 'unsaved' : m.layer === 'staged' ? 'staged' : m.change ?? 'deleted' }
+  return { glyph: m.change ? '▌' : '▁', tone: m.layer === 'unsaved' ? 'unsaved' : m.layer === 'staged' ? 'staged' : (m.change ?? 'deleted') }
 }
 
 /**
@@ -67,7 +67,7 @@ export function explorerProps(o: {
           ]
     const isRendered = !isEdit && p.kind === 'markdown' && p.mdView !== 'source'
     // The git gutter: every line's layer and change, for the lines in view.
-      const diff = base ? lineMarks({ head: base.head, index: base.index, disk: o.disk ?? p.lines, buffer: p.lines }) : null
+    const diff = base ? lineMarks({ head: base.head, index: base.index, disk: o.disk ?? p.lines, buffer: p.lines }) : null
     const gutter = diff ? diff.marks.slice(p.top, end).map(gutterMark) : null
     const changes = diff ? { ...diff.summary, repo: base?.repo ?? false } : null
     let edit: ExplorerProps['edit'] = null
@@ -98,7 +98,17 @@ export function explorerProps(o: {
       room,
       width: inner,
       markdown: isRendered ? markdownWindow(p.lines, p.top, codeRoom) : null,
-      code: !isEdit && !isRendered && p.kind !== 'image' && end > p.top ? { source: p.lines.slice(p.top, end).map(l => clipEnd(l, MAX_DRAWN) || ' ').join('\n'), path: p.path, startLine: p.top + 1 } : null,
+      code:
+        !isEdit && !isRendered && p.kind !== 'image' && end > p.top
+          ? {
+              source: p.lines
+                .slice(p.top, end)
+                .map(l => clipEnd(l, MAX_DRAWN) || ' ')
+                .join('\n'),
+              path: p.path,
+              startLine: p.top + 1,
+            }
+          : null,
       note: noteText,
       empty: null,
       colors: C,
@@ -114,7 +124,13 @@ export function explorerProps(o: {
     }
     // A picture's size sits bottom right, like a file's line count; the note line is kept for problems.
     if (p.kind === 'image') {
-      props = { ...props, counter: p.image ? `${p.image.width}×${p.image.height} px` : '', fileMode: null, readOnly: null, note: ex.error ?? p.status ?? p.note }
+      props = {
+        ...props,
+        counter: p.image ? `${p.image.width}×${p.image.height} px` : '',
+        fileMode: null,
+        readOnly: null,
+        note: ex.error ?? p.status ?? p.note,
+      }
     }
   } else {
     const cursor = Math.min(ex.cursor, Math.max(0, rows.length - 1))
@@ -164,7 +180,11 @@ export function explorerProps(o: {
       changes: null,
       markdown: null,
       edit: null,
-      empty: rows.length > 0 ? null : ex.error ?? (rows.length === 0 ? (ex.onlyTouched ? 'No files touched yet this session.' : ex.filter ? 'Nothing matches the filter.' : 'Empty folder.') : null),
+      empty:
+        rows.length > 0
+          ? null
+          : (ex.error ??
+            (rows.length === 0 ? (ex.onlyTouched ? 'No files touched yet this session.' : ex.filter ? 'Nothing matches the filter.' : 'Empty folder.') : null)),
       colors: C,
     }
   }

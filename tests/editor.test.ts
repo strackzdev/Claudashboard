@@ -4,8 +4,7 @@ import { colFromVisual, reduceEdit, textOf, visualCol } from '../hooks/editor'
 import { emptyPreview, previewOf } from '../hooks/explorer-state'
 
 const doc = (lines: string[], row = 0, col = 0) => emptyPreview('a.ts', { lines, row, col, mode: 'edit' })
-const type = (p: ReturnType<typeof doc>, ...keys: string[]) =>
-  keys.reduce((x, key) => reduceEdit(x, { key }, 10).p, p)
+const type = (p: ReturnType<typeof doc>, ...keys: string[]) => keys.reduce((x, key) => reduceEdit(x, { key }, 10).p, p)
 
 test('typing, Enter with indentation, Backspace and Delete across lines', () => {
   let p = type(doc(['  foo'], 0, 5), 'b', 'a', 'r')

@@ -98,15 +98,13 @@ export function previewOf(path: string, text: string, size: number, mtimeMs = 0)
   const all = text.replace(/\r\n?/g, '\n').split('\n')
   const eol = all.length > 1 && all[all.length - 1] === ''
   if (eol) all.pop()
-  // eslint-disable-next-line no-control-regex
   const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f]/ // no g: .test must not carry lastIndex between lines
   let readOnly: string | null = null
   if (/\r(?!\n)/.test(text) || (crlf && /(?<!\r)\n/.test(text))) readOnly = 'mixed line endings'
   else if (all.some(l => CONTROL.test(l))) readOnly = 'control characters in the file'
   else if (all.some(l => l.length > MAX_LINE)) {
     readOnly = `line ${all.findIndex(l => l.length > MAX_LINE) + 1} is longer than ${MAX_LINE} characters`
-  }
-  else if (all.length > MAX_PREVIEW_LINES) readOnly = `longer than ${MAX_PREVIEW_LINES} lines`
+  } else if (all.length > MAX_PREVIEW_LINES) readOnly = `longer than ${MAX_PREVIEW_LINES} lines`
   const strip = new RegExp(CONTROL, 'g')
   const lines = all.slice(0, MAX_PREVIEW_LINES).map(l => clipEnd(l.replace(strip, ''), MAX_LINE))
   const note = all.length > MAX_PREVIEW_LINES ? `showing the first ${MAX_PREVIEW_LINES} of ${all.length} lines` : null
@@ -114,12 +112,7 @@ export function previewOf(path: string, text: string, size: number, mtimeMs = 0)
 }
 
 export type Effect =
-  | { kind: 'open'; entry: Entry; edit?: true }
-  | { kind: 'edit' }
-  | { kind: 'up' }
-  | { kind: 'mention'; path: string }
-  | { kind: 'reload' }
-  | null
+  { kind: 'open'; entry: Entry; edit?: true } | { kind: 'edit' } | { kind: 'up' } | { kind: 'mention'; path: string } | { kind: 'reload' } | null
 
 export type Key = { key: string; ctrl?: true; meta?: true; shift?: true }
 

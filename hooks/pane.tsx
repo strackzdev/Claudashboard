@@ -62,11 +62,7 @@ export const registerPane = (on: On, C: Colors) => {
     const bodyRows = Math.max(8, e.props.scroll.bodyRows)
 
     const clock = (key: string, since: number, color: string) =>
-      hasClient ? (
-        <els.Client key={key} module="./elapsed.tsx" props={{ since, now, color }} />
-      ) : (
-        <Text color={color}>{fmtDuration(now - since)}</Text>
-      )
+      hasClient ? <els.Client key={key} module="./elapsed.tsx" props={{ since, now, color }} /> : <Text color={color}>{fmtDuration(now - since)}</Text>
 
     const section = (title: string, right: unknown, body: unknown, color = C.frame) => (
       <Box flexDirection="column" borderStyle="round" borderColor={color} paddingX={1} width={W}>
@@ -196,12 +192,21 @@ export const registerPane = (on: On, C: Colors) => {
 
     // ---- explorer: breadcrumb and rule, the rows, the hint line
     // Inside a git repository, the project bar takes one row above the files.
-    const repo = ex.onlyTouched ? null : ex.repo ?? null
+    const repo = ex.onlyTouched ? null : (ex.repo ?? null)
     const room = Math.max(3, bodyRows - vitalsRows - agentsRows - 2 - 3 - (repo ? 1 : 0))
-    const props = explorerProps({ ex, touched: t, now, room, width: inner, colors: C, base: ex.preview ? bases.get(ex.preview.path) ?? null : null, disk: ex.preview ? saved.get(ex.preview.path) ?? null : null })
+    const props = explorerProps({
+      ex,
+      touched: t,
+      now,
+      room,
+      width: inner,
+      colors: C,
+      base: ex.preview ? (bases.get(ex.preview.path) ?? null) : null,
+      disk: ex.preview ? (saved.get(ex.preview.path) ?? null) : null,
+    })
 
     // A picture is the pane's to draw (the explorer client cannot): over the explorer's empty body.
-    const pic = ex.preview?.kind === 'image' ? ex.preview.image ?? null : null
+    const pic = ex.preview?.kind === 'image' ? (ex.preview.image ?? null) : null
     const picRows = Math.max(1, room - (props.note ? 1 : 0))
     const picBox = pic ? fitPicture(pic.width, pic.height, inner, picRows) : null
     const picture =
@@ -212,7 +217,13 @@ export const registerPane = (on: On, C: Colors) => {
       ) : null
 
     const filesBox = (
-      <Box flexDirection="column" borderStyle="round" borderColor={ex.preview?.mode === 'edit' ? C.warn : ex.preview ? C.accent : C.frame} paddingX={1} width={W}>
+      <Box
+        flexDirection="column"
+        borderStyle="round"
+        borderColor={ex.preview?.mode === 'edit' ? C.warn : ex.preview ? C.accent : C.frame}
+        paddingX={1}
+        width={W}
+      >
         {repo ? (
           <Box flexDirection="row" justifyContent="space-between" width={inner}>
             <Box flexShrink={1}>

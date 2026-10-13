@@ -215,6 +215,7 @@ New logic goes in a pure module with a test; the I/O modules stay thin.
 ```sh
 claude plugin validate .     # manifest, marketplace and hooks, as the engine reads them
 claude plugin test .         # unit and drawing tests
+npx prettier --write hooks tests   # the house style (.prettierrc); CI checks it
 claude --plugin-dir .        # a session with your working copy loaded, hot-reloading on save
 ```
 

@@ -17,7 +17,7 @@ test('a markdown window that starts inside a code fence reopens it', () => {
   expect(markdownWindow(lines, 5, 3)).toBe('after')
 })
 
-test('a PNG\'s size comes from its header; pictures keep their proportions', () => {
+test("a PNG's size comes from its header; pictures keep their proportions", () => {
   // The first 24 bytes of a 640×480 PNG.
   const head = 'iVBORw0KGgoAAAANSUhEUgAAAoAAAAHg'
   expect(pngSize(fromBase64(head))).toEqual({ width: 640, height: 480 })

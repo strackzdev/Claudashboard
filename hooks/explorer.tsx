@@ -91,7 +91,6 @@ type State = { ref: Ref }
 /** Rows above the list: the breadcrumb and a rule. */
 const HEAD = 2
 
-
 const FALLBACK: Palette = {
   accent: 'claude',
   dir: 'suggestion',
@@ -171,8 +170,7 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
   const c = props.colors
   const markColor = (t: GutterMark['tone']) =>
     t === 'unsaved' ? c.warn : t === 'added' ? c.ok : t === 'modified' ? c.accent : t === 'deleted' ? c.bad : c.purple
-  const letterColor = (t: GitLetter['tone']) =>
-    t === 'staged' || t === 'untracked' ? c.ok : t === 'modified' ? c.warn : c.bad
+  const letterColor = (t: GitLetter['tone']) => (t === 'staged' || t === 'untracked' ? c.ok : t === 'modified' ? c.warn : c.bad)
   const markAt = (i: number) => {
     const m = props.gutter?.[i]
     return m ? <Text color={markColor(m.tone)}>{m.glyph}</Text> : <Text> </Text>
@@ -247,13 +245,7 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
               {`${r.git?.letter ?? ' '} `}
             </Text>
             <Box width={nameW}>
-              <Text
-                backgroundColor={bg}
-                color={nameColor}
-                bold={r.isSelected || r.isDir}
-                wrap="truncate-end"
-                hover={{ backgroundColor: c.hoverBg }}
-              >
+              <Text backgroundColor={bg} color={nameColor} bold={r.isSelected || r.isDir} wrap="truncate-end" hover={{ backgroundColor: c.hoverBg }}>
                 {r.label.padEnd(nameW)}
               </Text>
             </Box>
@@ -375,7 +367,7 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
               {ch && ch.deleted ? <Text color={c.bad}>{`−${ch.deleted} `}</Text> : null}
               {ch && ch.staged ? <Text color={c.purple}>{`✓${ch.staged} staged `}</Text> : null}
               {ch && !ch.repo && (ch.added || ch.modified || ch.deleted) ? <Text color={c.dim}>{'since opened '}</Text> : null}
-              {ch && (ch.unsaved || ch.added || ch.modified || ch.deleted || ch.staged) ? <Text color={c.dim}>{' '}</Text> : null}
+              {ch && (ch.unsaved || ch.added || ch.modified || ch.deleted || ch.staged) ? <Text color={c.dim}> </Text> : null}
               <Text color={c.dim}>{props.counter}</Text>
             </Text>
           </Box>

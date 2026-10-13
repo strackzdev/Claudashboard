@@ -9,8 +9,22 @@ export const TAB = 2
 
 /** Key names the surface sends that are not text. */
 const NAMED = new Set([
-  'up', 'down', 'left', 'right', 'return', 'enter', 'tab', 'backspace', 'delete', 'pageup', 'pagedown',
-  'home', 'end', 'escape', 'insert', 'space',
+  'up',
+  'down',
+  'left',
+  'right',
+  'return',
+  'enter',
+  'tab',
+  'backspace',
+  'delete',
+  'pageup',
+  'pagedown',
+  'home',
+  'end',
+  'escape',
+  'insert',
+  'space',
 ])
 
 export type EditEffect = 'save' | 'exit' | 'undo' | null

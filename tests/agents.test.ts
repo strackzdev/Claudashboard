@@ -8,7 +8,7 @@ test('an agent stored by an older version still has every field', () => {
   expect(a.steps).toBe(0)
 })
 
-test('agent helpers: what a tool call does, and a step\'s usage', () => {
+test("agent helpers: what a tool call does, and a step's usage", () => {
   expect(describeTool('Read', { file_path: '/p/src/a.ts' })).toBe('Read a.ts')
   expect(describeTool('Bash', { command: 'npm test\nmore' })).toBe('$ npm test')
   expect(describeTool('Grep', { pattern: 'TODO' })).toBe('Grep TODO')

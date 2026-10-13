@@ -10,7 +10,8 @@ import { absOf, changedOnDisk, getExplorer, logged, getTouched, history, paneSta
 
 /** Whether two listings show the same thing: names, sizes, times and git letters. */
 const sameListing = (a: Entry[], b: Entry[]) =>
-  a.length === b.length && a.every((e, i) => {
+  a.length === b.length &&
+  a.every((e, i) => {
     const o = b[i]
     return o !== undefined && e.path === o.path && e.kind === o.kind && e.size === o.size && e.mtimeMs === o.mtimeMs && e.git === o.git
   })

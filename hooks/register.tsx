@@ -10,7 +10,7 @@ import { loadDir, loadPreview, noteEdit, poll } from './files'
 import { refreshGit } from './git'
 import { ONE_DARK, THEME, registerPane } from './pane'
 import { isAbsolute, parentOf, relTo, toSlash } from './paths'
-import { PANE, getExplorer, openPane, paneState, setExplorer, toKey, updateAgents, updateExplorer, updateTouched, updateVitals, usageToVitals } from './state'
+import { PANE, getExplorer, logged, openPane, paneState, setExplorer, toKey, updateAgents, updateExplorer, updateTouched, updateVitals, usageToVitals } from './state'
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 
@@ -19,7 +19,7 @@ async function goUp($: EngineInterface) {
   if (ex.preview?.mode === 'edit') return leaveEdit($)
   if (ex.preview) {
     await updateExplorer($, x => ({ ...x, preview: null }))
-    void refreshGit($).catch(() => undefined)
+    void refreshGit($).catch(logged($, 'refreshGit'))
     return
   }
   if (ex.onlyTouched) {
@@ -94,11 +94,11 @@ export const register: Register = (on, options) => {
       description: 'STRACKZDEVHUB: open or close the hub, jump the explorer to a folder, or reset it',
       argumentHint: '[close|cd <path>|save|reset]',
     })
-    await Promise.all([refreshUsage($), refreshModel($)]).catch(() => undefined)
-    await initExplorer($, showHiddenDefault).catch(() => undefined)
-    if (options.openOnStart !== false) void openPane($).catch(() => undefined)
+    await Promise.all([refreshUsage($), refreshModel($)]).catch(logged($, 'session vitals'))
+    await initExplorer($, showHiddenDefault).catch(logged($, 'initExplorer'))
+    if (options.openOnStart !== false) void openPane($).catch(logged($, 'openPane'))
     // Live refresh: edits made in another editor, git add/commit run elsewhere.
-    $.clock.every(3000, () => poll($).catch(() => undefined))
+    $.clock.every(3000, () => poll($).catch(logged($, 'poll')))
     return next(e)
   })
 
@@ -156,7 +156,7 @@ export const register: Register = (on, options) => {
 
   on('classic.UserPromptSubmit', async ($, e, next) => {
     if (e.permission_mode) {
-      await updateVitals($, x => ({ ...x, mode: String(e.permission_mode) })).catch(() => undefined)
+      await updateVitals($, x => ({ ...x, mode: String(e.permission_mode) })).catch(logged($, 'permission mode'))
     }
     return next(e)
   })
@@ -175,7 +175,7 @@ export const register: Register = (on, options) => {
     }
     const result = yield* next(e)
     const id = e.agentId
-    await updateAgents($, list => list.map(a => (a.id === id ? stepAgent(a, e.model, result.usage) : a))).catch(() => undefined)
+    await updateAgents($, list => list.map(a => (a.id === id ? stepAgent(a, e.model, result.usage) : a))).catch(logged($, 'agent step'))
     return result
   })
 
@@ -183,7 +183,7 @@ export const register: Register = (on, options) => {
     const started = await next(e)
     if (started.deny !== undefined || !started.agentId) return started
     // Bookkeeping only: a failure here must never fail the Agent call.
-    await noteSpawn($, e, started.agentId, started.model).catch(() => undefined)
+    await noteSpawn($, e, started.agentId, started.model).catch(logged($, 'agent spawn'))
     return started
   })
 
@@ -192,10 +192,10 @@ export const register: Register = (on, options) => {
     if (e.agentId) {
       // A finished agent leaves the list.
       const id = e.agentId
-      await updateAgents($, list => list.filter(a => a.id !== id)).catch(() => undefined)
+      await updateAgents($, list => list.filter(a => a.id !== id)).catch(logged($, 'agent done'))
       return done
     }
-    void refreshGit($).catch(() => undefined)
+    void refreshGit($).catch(logged($, 'refreshGit'))
     const [now, u] = await Promise.all([$.clock.now(), $.session.usage().catch(() => null)])
     await updateVitals($, v => {
       const cost = u?.cost?.usd ?? null
@@ -218,7 +218,7 @@ export const register: Register = (on, options) => {
   on('session.compact', async ($, e, next) => {
     const done = await next(e)
     if (!e.agentId && e.trigger !== 'precompute') {
-      await updateVitals($, v => ({ ...v, compactions: v.compactions + 1 })).catch(() => undefined)
+      await updateVitals($, v => ({ ...v, compactions: v.compactions + 1 })).catch(logged($, 'compaction'))
     }
     return done
   })
@@ -228,14 +228,12 @@ export const register: Register = (on, options) => {
     if (e.agentId) {
       const id = e.agentId
       const what = describeTool(e.tool, e as unknown as Record<string, unknown>)
-      await updateAgents($, list => list.map(a => (a.id === id ? { ...a, tools: a.tools + 1, lastTool: what } : a))).catch(
-        () => undefined,
-      )
+      await updateAgents($, list => list.map(a => (a.id === id ? { ...a, tools: a.tools + 1, lastTool: what } : a))).catch(logged($, 'agent tool'))
     }
     const ran = await next(e)
     if (!EDIT_TOOLS.has(e.tool) || ran.deny !== undefined || ran.isError === true) return ran
     // Bookkeeping only: a failure here must never change the call's result.
-    await noteEdit($, e).catch(() => undefined)
+    await noteEdit($, e).catch(logged($, 'noteEdit'))
     return ran
   })
 

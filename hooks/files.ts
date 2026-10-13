@@ -6,7 +6,7 @@ import { bases, fetchBase, gitStatusOf, opened } from './git'
 import { kindOf } from './media'
 import { joinPath, parentOf, relTo, toSlash } from './paths'
 import { loadPicture } from './picture'
-import { absOf, changedOnDisk, getExplorer, getTouched, history, paneState, saved, setPreview, updateExplorer, updateTouched } from './state'
+import { absOf, changedOnDisk, getExplorer, logged, getTouched, history, paneState, saved, setPreview, updateExplorer, updateTouched } from './state'
 
 /** Whether two listings show the same thing: names, sizes, times and git letters. */
 const sameListing = (a: Entry[], b: Entry[]) =>
@@ -118,7 +118,7 @@ export async function loadPreview($: EngineInterface, path: string, keep: Partia
     saved.set(path, fresh.lines)
     if (!opened.has(path)) opened.set(path, fresh.lines)
     bases.delete(path)
-    void fetchBase($, ex.root, path).catch(() => undefined)
+    void fetchBase($, ex.root, path).catch(logged($, 'fetchBase'))
     await updateExplorer($, x => ({ ...x, preview, error: null }))
   } catch (err) {
     await updateExplorer($, x => ({ ...x, error: `cannot read ${path}: ${String(err)}` }))

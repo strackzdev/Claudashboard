@@ -94,3 +94,10 @@ export async function openPane($: EngineInterface) {
 }
 
 export const absOf = (root: string, path: string) => (isAbsolute(path) ? path : joinPath(root, path))
+
+/** The `.catch` for bookkeeping that must never fail the event it rides on: the error goes to the debug log (`claude --debug`). */
+export function logged($: EngineInterface, where: string) {
+  return (err: unknown) => {
+    $.ui.log(`${where}: ${String(err)}`, { to: 'debug' })
+  }
+}

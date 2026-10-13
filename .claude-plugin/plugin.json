@@ -1,0 +1,42 @@
+{
+  "name": "jopinhub",
+  "version": "0.2.0",
+  "description": "JOPINHUB: a clean hub pane for Claude Code. Session vitals (model, effort, context, cost, rate limits), live subagent cards, and a mouse + keyboard file explorer with in-pane preview",
+  "author": {
+    "name": "José Pinto"
+  },
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "claude-code-mod",
+    "dashboard",
+    "file-explorer",
+    "subagents",
+    "tui"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "palette": {
+      "title": "Palette",
+      "description": "onedark: fixed One Dark colours; theme: follow your Claude Code theme",
+      "type": "string",
+      "options": [
+        "onedark",
+        "theme"
+      ],
+      "default": "onedark"
+    },
+    "showHidden": {
+      "title": "Show hidden files",
+      "description": "List dotfiles in the explorer by default (toggle with . in the pane)",
+      "type": "boolean",
+      "default": false
+    },
+    "openOnStart": {
+      "title": "Open on start",
+      "description": "Open the JOPINHUB pane when a session starts",
+      "type": "boolean",
+      "default": true
+    }
+  }
+}

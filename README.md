@@ -33,26 +33,24 @@ You need Claude Code **2.1.287 or later**, which is when mods arrived.
 Inside Claude Code:
 
 ```
-/plugin marketplace add OWNER/strackzdevhub
+/plugin marketplace add strackzdev/claude_strackzdevhub
 /plugin install strackzdevhub@strackzdevhub
 /strackzdevhub
 ```
-
-Replace `OWNER` with the GitHub account that hosts this repository.
 
 <details>
 <summary>From a local clone</summary>
 
 ```sh
-git clone https://github.com/OWNER/strackzdevhub
-claude plugin marketplace add ./strackzdevhub
+git clone https://github.com/strackzdev/claude_strackzdevhub
+claude plugin marketplace add ./claude_strackzdevhub
 claude plugin install strackzdevhub@strackzdevhub
 ```
 
 To try it for a single session without installing it:
 
 ```sh
-claude --plugin-dir ./strackzdevhub
+claude --plugin-dir ./claude_strackzdevhub
 ```
 
 </details>

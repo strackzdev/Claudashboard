@@ -7,6 +7,7 @@ import {
   DEFAULT_EXPLORER,
   DEFAULT_VITALS,
   EFFORT_LEVEL,
+  fitHeader,
   MAX_DRAWN,
   baseName,
   clipEnd,
@@ -546,7 +547,8 @@ export const register: Register = (on, options) => {
     const { Box, Text } = els
     const hasClient = 'Client' in els
     const [v, ex, t, list, now] = await Promise.all([getVitals($), getExplorer($), getTouched($), getAgents($), $.clock.now()])
-    const W = Math.max(40, e.props.bodyColumns)
+    // The pane's real width: drawing wider than it would overflow; every row below truncates instead.
+    const W = Math.max(24, e.props.bodyColumns)
     const inner = W - 4 // a section's round border and its one-cell padding each side
     const bodyRows = Math.max(8, e.props.scroll.bodyRows)
 
@@ -687,7 +689,8 @@ export const register: Register = (on, options) => {
     if (ex.preview) {
       const p = ex.preview
       const isEdit = p.mode === 'edit'
-      const codeRoom = hasNoteRow(p) || ex.error ? room - 1 : room
+      const noteText = ex.error ?? p.status ?? p.note ?? (p.readOnly ? `read-only: ${p.readOnly}` : null)
+      const codeRoom = noteText ? room - 1 : room
       const end = Math.min(p.lines.length, p.top + codeRoom)
       const hints: Hint[] = isEdit
         ? [
@@ -732,12 +735,15 @@ export const register: Register = (on, options) => {
         room,
         width: inner,
         code: !isEdit && end > p.top ? { source: p.lines.slice(p.top, end).map(l => clipEnd(l, MAX_DRAWN)).join('\n'), path: p.path, startLine: p.top + 1 } : null,
-        note: ex.error ?? p.status ?? p.note,
+        note: noteText,
         empty: null,
         colors: C,
         fileMode: isEdit ? 'edit' : p.readOnly ? 'readonly' : 'view',
         readOnly: p.readOnly,
         isDirty: p.dirty,
+        label: null,
+        labelHint: null,
+        dirtyMark: null,
         edit,
       }
     } else {
@@ -780,11 +786,18 @@ export const register: Register = (on, options) => {
         fileMode: null,
         readOnly: null,
         isDirty: false,
+        label: null,
+        labelHint: null,
+        dirtyMark: null,
         edit: null,
         empty: rows.length > 0 ? null : ex.error ?? (rows.length === 0 ? (ex.onlyTouched ? 'No files touched yet this session.' : ex.filter ? 'Nothing matches the filter.' : 'Empty folder.') : null),
         colors: C,
       }
     }
+
+    // Fit the header to the width: the label stays, the extras give way, the path folds.
+    const header = fitHeader({ width: inner, crumbs: props.crumbs, filter: props.filter, mode: props.fileMode, isDirty: props.isDirty })
+    props = { ...props, crumbs: header.crumbs, label: header.label, labelHint: header.hint, dirtyMark: header.dirty }
 
     const filesBox = (
       <Box flexDirection="column" borderStyle="round" borderColor={ex.preview?.mode === 'edit' ? C.warn : ex.preview ? C.accent : C.frame} paddingX={1} width={W}>

@@ -37,6 +37,10 @@ export type ExplorerProps = {
   /** Why the open file cannot be edited: drawn beside the READ ONLY label. */
   readOnly: string | null
   isDirty: boolean
+  /** The header as fitted to the width by the hooks module: the mode label, the shortcut beside it, the unsaved mark. */
+  label: string | null
+  labelHint: Hint | null
+  dirtyMark: string | null
   /** The editor's window: display lines (tabs expanded), the cursor in it, the gutter and text widths. */
   edit: EditView | null
 }
@@ -57,7 +61,6 @@ type State = { ref: Ref }
 /** Rows above the list: the breadcrumb and a rule. */
 const HEAD = 2
 
-const LABELS = { view: ' VIEW MODE ', edit: ' EDIT MODE ', readonly: ' READ ONLY ' } as const
 
 const FALLBACK: Palette = {
   accent: 'claude',
@@ -92,6 +95,9 @@ function complete(raw: Partial<ExplorerProps> | null | undefined): ExplorerProps
     fileMode: p.fileMode === 'view' || p.fileMode === 'edit' || p.fileMode === 'readonly' ? p.fileMode : null,
     readOnly: typeof p.readOnly === 'string' ? p.readOnly : null,
     isDirty: p.isDirty === true,
+    label: typeof p.label === 'string' ? p.label : null,
+    labelHint: p.labelHint && typeof p.labelHint.key === 'string' ? p.labelHint : null,
+    dirtyMark: typeof p.dirtyMark === 'string' ? p.dirtyMark : null,
     edit: p.edit && Array.isArray(p.edit.lines) ? p.edit : null,
   }
 }
@@ -111,8 +117,8 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
       if (p.type !== 'down' || p.button !== 'left') return
       const cur = ref.props
       // The mode label toggles view and edit; the rest of the breadcrumb goes back.
-      const label = cur.fileMode ? LABELS[cur.fileMode] : ''
-      if (p.y === 0 && label && p.x >= Math.max(20, cur.width) - label.length) return surface.post({ k: 'mode', room: cur.room })
+      const label = cur.label ?? ''
+      if (p.y === 0 && label && p.x >= Math.max(10, cur.width) - label.length) return surface.post({ k: 'mode', room: cur.room })
       if (p.y === 0) return surface.post({ k: 'crumb', room: cur.room })
       if (cur.edit) {
         const row = p.y - HEAD - (cur.note ? 1 : 0)
@@ -130,51 +136,47 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
   const metaW = props.mode === 'list' ? Math.min(20, Math.max(0, W - 24)) : 0
   const nameW = Math.max(6, W - metaW - 4)
 
+  const pillBg = props.fileMode === 'edit' ? c.warn : props.fileMode === 'view' ? c.accent : c.dim
   const crumbs = (
     <Box flexDirection="row" justifyContent="space-between" width={W}>
-      <Text wrap="truncate-start">
-        {props.crumbs.map((part, i) => (
-          <Text>
-            {i > 0 ? <Text color={c.dim}> › </Text> : null}
-            <Text color={i === props.crumbs.length - 1 ? c.accent : c.dim} bold={i === props.crumbs.length - 1}>
-              {part}
-            </Text>
-          </Text>
-        ))}
-        {props.filter !== null ? <Text color={c.warn}>{`  ⌕ ${props.filter}`}</Text> : null}
-      </Text>
-      <Text>
-        <Text color={c.dim}>{props.counter}</Text>
-        {props.isDirty ? <Text color={c.warn}>{'  ● modified'}</Text> : null}
-        {props.fileMode ? (
-          <Text>
-            {'  '}
-            {props.fileMode === 'readonly' && props.readOnly ? <Text color={c.dim}>{`${props.readOnly} `}</Text> : null}
-            {props.fileMode !== 'readonly' ? (
-              <Text>
-                <Text color={c.accent} bold>
-                  {props.fileMode === 'view' ? 'e' : 'ctrl+e'}
-                </Text>
-                <Text color={c.dim}>{props.fileMode === 'view' ? ' to edit ' : ' to view '}</Text>
+      <Box flexShrink={1}>
+        <Text wrap="truncate-end">
+          {props.crumbs.map((part, i) => (
+            <Text>
+              {i > 0 ? <Text color={c.dim}> › </Text> : null}
+              <Text color={i === props.crumbs.length - 1 ? c.accent : c.dim} bold={i === props.crumbs.length - 1}>
+                {part}
               </Text>
-            ) : null}
-            <Text
-              backgroundColor={props.fileMode === 'edit' ? c.warn : props.fileMode === 'view' ? c.accent : c.dim}
-              color={c.pillFg}
-              bold
-            >
-              {LABELS[props.fileMode]}
             </Text>
-          </Text>
-        ) : null}
-      </Text>
+          ))}
+          {props.filter !== null ? <Text color={c.warn}>{`  ⌕ ${props.filter}`}</Text> : null}
+        </Text>
+      </Box>
+      <Box flexShrink={0}>
+        <Text>
+          {props.dirtyMark ? <Text color={c.warn}>{`${props.dirtyMark}  `}</Text> : null}
+          {props.labelHint ? (
+            <Text>
+              <Text color={c.accent} bold>
+                {props.labelHint.key}
+              </Text>
+              <Text color={c.dim}>{` ${props.labelHint.label}  `}</Text>
+            </Text>
+          ) : null}
+          {props.label ? (
+            <Text backgroundColor={pillBg} color={c.pillFg} bold>
+              {props.label}
+            </Text>
+          ) : null}
+        </Text>
+      </Box>
     </Box>
   )
 
   const list = (
     <Box flexDirection="column" height={props.room}>
       {props.empty ? (
-        <Text color={c.dim} italic>
+        <Text color={c.dim} italic wrap="truncate-end">
           {`  ${props.empty}`}
         </Text>
       ) : null}
@@ -253,7 +255,11 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
 
   const preview = (
     <Box flexDirection="column" height={props.room}>
-      {props.note ? <Text color={c.warn}>{`⚠ ${props.note}`}</Text> : null}
+      {props.note ? (
+        <Text color={c.warn} wrap="truncate-end">
+          {`⚠ ${props.note}`}
+        </Text>
+      ) : null}
       {editor}
       {props.code && props.code.source ? (
         <Code source={props.code.source} path={props.code.path} startLine={props.code.startLine} wrap="truncate-end" />
@@ -266,17 +272,26 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
       {crumbs}
       <Text color={c.dim}>{'─'.repeat(W)}</Text>
       {props.mode === 'list' ? list : preview}
-      <Text wrap="truncate-end">
-        {props.hints.map((hint, i) => (
-          <Text>
-            {i > 0 ? <Text color={c.dim}>{'  '}</Text> : null}
-            <Text color={c.accent} bold>
-              {hint.key}
-            </Text>
-            <Text color={c.dim}>{` ${hint.label}`}</Text>
+      <Box flexDirection="row" justifyContent="space-between" width={W}>
+        <Box flexShrink={1}>
+          <Text wrap="truncate-end">
+            {props.hints.map((hint, i) => (
+              <Text>
+                {i > 0 ? <Text color={c.dim}>{'  '}</Text> : null}
+                <Text color={c.accent} bold>
+                  {hint.key}
+                </Text>
+                <Text color={c.dim}>{` ${hint.label}`}</Text>
+              </Text>
+            ))}
           </Text>
-        ))}
-      </Text>
+        </Box>
+        {props.counter ? (
+          <Box flexShrink={0} marginLeft={2}>
+            <Text color={c.dim}>{props.counter}</Text>
+          </Box>
+        ) : null}
+      </Box>
     </Box>
   )
 }

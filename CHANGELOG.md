@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3 — 2026-10-13
+
+- Responsive file box header: the path folds its middle folders (`strackz › … › CODEOWNERS`), then cuts the name from the middle keeping its extension; the mode label always stays (short `VIEW`/`EDIT`/`RO` when narrow); the shortcut and `● modified` give way first.
+- The line count / position moved to the bottom right, beside the key hints.
+- The read-only reason moved to the note line above the code.
+- The pane follows its real width (it used to draw at least 40 columns and overflow narrow panes); note and empty-state lines truncate instead of wrapping.
+
 ## 0.3.2 — 2026-10-13
 
 - Files with ordinary long lines (HTML, CSS) are editable: only lines over 10,000 characters (minified code) make a file read-only. Lines are kept whole; the view draws the first 1,000 characters of each.

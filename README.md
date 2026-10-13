@@ -173,4 +173,4 @@ Once the mod has loaded, `.claude-plugin/types/` holds the engine's typings, so 
 
 ## License
 
-MIT © José Pinto
+MIT © strackzdev

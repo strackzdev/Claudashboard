@@ -3,7 +3,7 @@
   "version": "0.3.3",
   "description": "STRACKZDEVHUB: a clean hub pane for Claude Code. Session vitals (model, effort, context, cost, rate limits), live subagent cards, and a mouse + keyboard file explorer with in-pane preview and editor",
   "author": {
-    "name": "José Pinto"
+    "name": "strackzdev"
   },
   "license": "MIT",
   "homepage": "https://github.com/strackzdev/claude_strackzdevhub",

@@ -13,6 +13,7 @@ export type Palette = {
   selectedBg: string
   hoverBg: string
   warn: string
+  pillFg: string
 }
 
 export type Hint = { key: string; label: string }
@@ -31,6 +32,21 @@ export type ExplorerProps = {
   note: string | null
   empty: string | null
   colors: Palette
+  /** The open file's mode, drawn as the label at the top right; null in the list. */
+  fileMode: 'view' | 'edit' | 'readonly' | null
+  isDirty: boolean
+  /** The editor's window: display lines (tabs expanded), the cursor in it, the gutter and text widths. */
+  edit: EditView | null
+}
+
+export type EditView = {
+  lines: string[]
+  startLine: number
+  cursorRow: number
+  cursorVis: number
+  hoff: number
+  gutterW: number
+  textW: number
 }
 
 type Ref = { props: ExplorerProps }
@@ -38,6 +54,8 @@ type State = { ref: Ref }
 
 /** Rows above the list: the breadcrumb and a rule. */
 const HEAD = 2
+
+const LABELS = { view: ' VIEW MODE ', edit: ' EDIT MODE ', readonly: ' READ ONLY ' } as const
 
 const FALLBACK: Palette = {
   accent: 'claude',
@@ -48,6 +66,7 @@ const FALLBACK: Palette = {
   selectedBg: 'subtle',
   hoverBg: 'subtle',
   warn: 'warning',
+  pillFg: 'inverseText',
 }
 
 /** Props as they may arrive: from an older load of the hooks module, or partial. Never throws. */
@@ -68,6 +87,9 @@ function complete(raw: Partial<ExplorerProps> | null | undefined): ExplorerProps
     note: typeof p.note === 'string' ? p.note : null,
     empty: typeof p.empty === 'string' ? p.empty : null,
     colors: { ...FALLBACK, ...(p.colors ?? {}) },
+    fileMode: p.fileMode === 'view' || p.fileMode === 'edit' || p.fileMode === 'readonly' ? p.fileMode : null,
+    isDirty: p.isDirty === true,
+    edit: p.edit && Array.isArray(p.edit.lines) ? p.edit : null,
   }
 }
 
@@ -85,8 +107,16 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
     surface.onPointer(p => {
       if (p.type !== 'down' || p.button !== 'left') return
       const cur = ref.props
-      // The breadcrumb goes back: out of the preview, or up a folder (a filter is dropped first).
+      // The mode label toggles view and edit; the rest of the breadcrumb goes back.
+      const label = cur.fileMode ? LABELS[cur.fileMode] : ''
+      if (p.y === 0 && label && p.x >= Math.max(20, cur.width) - label.length) return surface.post({ k: 'mode', room: cur.room })
       if (p.y === 0) return surface.post({ k: 'crumb', room: cur.room })
+      if (cur.edit) {
+        const row = p.y - HEAD - (cur.note ? 1 : 0)
+        if (row < 0 || row >= cur.edit.lines.length) return
+        const vis = p.x - cur.edit.gutterW - 3 + (row === cur.edit.cursorRow ? cur.edit.hoff : 0)
+        return surface.post({ k: 'place', row, vis, room: cur.room })
+      }
       const i = p.y - HEAD
       if (cur.mode === 'list' && i >= 0 && i < cur.rows.length) surface.post({ k: 'click', index: cur.top + i, room: cur.room })
     })
@@ -110,7 +140,22 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
         ))}
         {props.filter !== null ? <Text color={c.warn}>{`  ⌕ ${props.filter}`}</Text> : null}
       </Text>
-      <Text color={c.dim}>{props.counter}</Text>
+      <Text>
+        <Text color={c.dim}>{props.counter}</Text>
+        {props.isDirty ? <Text color={c.warn}>{'  ● modified'}</Text> : null}
+        {props.fileMode ? (
+          <Text>
+            {'  '}
+            <Text
+              backgroundColor={props.fileMode === 'edit' ? c.warn : props.fileMode === 'view' ? c.accent : c.dim}
+              color={c.pillFg}
+              bold
+            >
+              {LABELS[props.fileMode]}
+            </Text>
+          </Text>
+        ) : null}
+      </Text>
     </Box>
   )
 
@@ -156,9 +201,48 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
     </Box>
   )
 
+  const ev = props.edit
+  const editor = ev ? (
+    <Box flexDirection="column">
+      {ev.lines.map((line, i) => {
+        const gutter = `${String(ev.startLine + i).padStart(ev.gutterW)} │ `
+        if (i !== ev.cursorRow) {
+          return (
+            <Text wrap="truncate-end">
+              <Text color={c.dim}>{gutter}</Text>
+              <Text color={c.text}>{line.slice(0, ev.textW)}</Text>
+            </Text>
+          )
+        }
+        const shown = line.slice(ev.hoff)
+        const at = ev.cursorVis - ev.hoff
+        const before = shown.slice(0, at)
+        const under = shown[at] ?? ' '
+        const after = shown.slice(at + 1, Math.max(at + 1, ev.textW))
+        return (
+          <Text wrap="truncate-end">
+            <Text color={c.warn} bold>
+              {gutter}
+            </Text>
+            <Text backgroundColor={c.selectedBg} color={c.text}>
+              {before}
+            </Text>
+            <Text inverse color={c.warn}>
+              {under}
+            </Text>
+            <Text backgroundColor={c.selectedBg} color={c.text}>
+              {after.padEnd(Math.max(0, ev.textW - before.length - 1))}
+            </Text>
+          </Text>
+        )
+      })}
+    </Box>
+  ) : null
+
   const preview = (
     <Box flexDirection="column" height={props.room}>
       {props.note ? <Text color={c.warn}>{`⚠ ${props.note}`}</Text> : null}
+      {editor}
       {props.code && props.code.source ? (
         <Code source={props.code.source} path={props.code.path} startLine={props.code.startLine} wrap="truncate-end" />
       ) : null}

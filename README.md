@@ -1,6 +1,6 @@
 # STRACKZDEVHUB
 
-**A clean hub pane for Claude Code.** It shows the session's vitals, the subagents that are working right now, and a file explorer you drive with the mouse or the keyboard, with a syntax-highlighted preview inside the pane.
+**A clean hub pane for Claude Code.** It shows the session's vitals, the subagents that are working right now, and a file explorer you drive with the mouse or the keyboard, with a syntax-highlighted preview and a small editor inside the pane.
 
 ```
 ╭──────────────────────────────────────────────────────╮
@@ -97,6 +97,31 @@ The explorer starts at the session's working directory.
 | `t` | only files Claude touched this session | — |
 | `r` | refresh | — |
 | `@` | insert `@path` into your prompt | insert `@path` into your prompt |
+| `e` | open the file straight into edit mode | switch to edit mode |
+
+### Editing a file
+
+A label at the top right of the file box shows the mode: **VIEW MODE** (blue), **EDIT MODE** (yellow, and the box border turns yellow too) or **READ ONLY**. Click the label to switch modes, or press `e`.
+
+| Key, in edit mode | Does |
+| --- | --- |
+| typing, `Space`, `Tab` | insert text. `Tab` inserts a tab if the file indents with tabs, otherwise two spaces. Pasted text goes in whole, newlines included. |
+| `⏎` | new line, keeping the current line's indentation |
+| `⌫` `Del` | delete before / after the cursor, joining lines at the edges |
+| `↑` `↓` `←` `→` | move. Left and right wrap between lines. |
+| `Home` `End` | start of the line's indentation (press again for column 1) / end of line |
+| `PgUp` `PgDn`, `ctrl+Home` `ctrl+End` | page / start and end of the file |
+| click | put the cursor there |
+| `ctrl+s` | save (or run `/strackzdevhub save`) |
+| `ctrl+z` | undo, up to 100 steps per file |
+| `ctrl+e` | back to view mode. With unsaved changes, the first press warns and a second discards them. |
+
+`● modified` shows next to the label until you save, and the counter shows `Ln, Col`. While you're editing, `Esc` hands the keyboard back to the prompt and keeps your edits. Click the file box to carry on.
+
+**Safety:**
+- **Exact saves:** a save writes the file in the shape it was read, keeping its line endings (LF or CRLF) and whether it ends with a newline.
+- **Read-only files:** editing is off for any file the preview had to alter to show it, so a save can never write the altered text. That means binaries, files over 1 MB or 5,000 lines, files with control characters, lines over 400 characters, or mixed line endings. The label then reads **READ ONLY**, and pressing `e` says why.
+- **Changes made elsewhere:** if the file changed on disk after you opened it, for example because Claude edited it, `ctrl+s` warns first and only a second `ctrl+s` overwrites it. Without unsaved edits, the open file simply reloads when Claude changes it.
 
 Files Claude edited or created this session are marked **✎** in yellow, and new files appear automatically. The preview won't show binary files or files over 1 MB, and it shows at most the first 5,000 lines.
 
@@ -106,6 +131,7 @@ Files Claude edited or created this session are marked **✎** in yellow, and ne
 | --- | --- |
 | `/strackzdevhub` | open the hub |
 | `/strackzdevhub close` | close it |
+| `/strackzdevhub save` | save the file being edited |
 | `/strackzdevhub cd <path>` | jump the explorer to a folder: relative to the working directory, or an absolute path inside it (`..` is refused) |
 | `/strackzdevhub reset` | clear the touched files and agents, and move the explorer back to the root |
 
@@ -128,7 +154,8 @@ Open `/config` and find **strackzdevhub**, or set the values under `pluginConfig
 
 ```
 hooks/register.tsx   hooks: vitals, agents, commands, the pane drawing
-hooks/explorer.tsx   the explorer's client module (keys, clicks, list and preview)
+hooks/explorer.tsx   the explorer's client module (keys, clicks, list, preview, editor)
+hooks/editor.ts      pure editor logic: keys against the text, cursor, tabs (unit-tested)
 hooks/elapsed.tsx    a live timer that ticks without redrawing the pane
 hooks/core.ts        pure logic: formatting, paths, the key reducer (unit-tested)
 types/index.d.ts     the mod's $.state contract

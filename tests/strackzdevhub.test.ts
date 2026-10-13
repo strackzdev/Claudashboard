@@ -3,6 +3,7 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import {
   DEFAULT_EXPLORER,
+  emptyPreview,
   normalizeAgent,
   describeTool,
   stepAgent,
@@ -17,6 +18,7 @@ import {
   visibleEntries,
   windowTop,
 } from '../hooks/core'
+import { colFromVisual, reduceEdit, textOf, visualCol } from '../hooks/editor'
 import type { Entry, Explorer } from '../types'
 
 const file = (path: string, kind: Entry['kind'] = 'file'): Entry => ({
@@ -68,14 +70,14 @@ test('Backspace clears a filter first, then goes up', () => {
 
 test('in the preview, keys scroll within the file and Backspace goes back', () => {
   const lines = Array.from({ length: 50 }, (_, i) => `line ${i}`)
-  const s = ex({ preview: { path: 'src/a.ts', lines, top: 0, note: null } })
+  const s = ex({ preview: emptyPreview('src/a.ts', { lines }) })
   expect(reduceKey(s, { key: 'pagedown' }, 10).ex.preview?.top).toBe(9)
   expect(reduceKey(s, { key: 'end' }, 10).ex.preview?.top).toBe(40)
   expect(reduceKey(s, { key: 'up' }, 10).ex.preview?.top).toBe(0)
   expect(reduceKey(s, { key: 'backspace' }, 10).effect).toEqual({ kind: 'up' })
   expect(reduceKey(s, { key: 'h' }, 10).effect).toEqual({ kind: 'up' })
   // A note takes a row: the end scrolls one further so the last line shows.
-  const noted = ex({ preview: { path: 'src/a.ts', lines, top: 0, note: 'n' } })
+  const noted = ex({ preview: emptyPreview('src/a.ts', { lines, note: 'n' }) })
   expect(reduceKey(noted, { key: 'end' }, 10).ex.preview?.top).toBe(41)
   expect(reduceKey(s, { key: '@' }, 10).effect).toEqual({ kind: 'mention', path: 'src/a.ts' })
 })
@@ -172,4 +174,182 @@ test('the agents section shows while agents run, and leaves with them', async ($
   const after = await $.ui.mount({ ...pane(80), surface: 'terminal' })
   expect(await after.find({ text: /^AGENTS/ })).toBeUndefined()
   await after.unmount()
+})
+
+// ---------------------------------------------------------------- editing
+
+const doc = (lines: string[], row = 0, col = 0) => emptyPreview('a.ts', { lines, row, col, mode: 'edit' })
+const type = (p: ReturnType<typeof doc>, ...keys: string[]) =>
+  keys.reduce((x, key) => reduceEdit(x, { key }, 10).p, p)
+
+test('e opens the editor from the preview, and from the list on a file', () => {
+  const s = ex({ preview: emptyPreview('src/a.ts', { lines: ['x'] }) })
+  expect(reduceKey(s, { key: 'e' }, 10).effect).toEqual({ kind: 'edit' })
+  const list = ex({ cursor: 1 })
+  expect(reduceKey(list, { key: 'e' }, 10).effect).toEqual({ kind: 'open', entry: file('src/a.ts'), edit: true })
+  // A folder has nothing to edit.
+  expect(reduceKey(ex({ cursor: 0 }), { key: 'e' }, 10).effect).toBe(null)
+})
+
+test('typing, Enter with indentation, Backspace and Delete across lines', () => {
+  let p = type(doc(['  foo'], 0, 5), 'b', 'a', 'r')
+  expect(p.lines).toEqual(['  foobar'])
+  expect(p.dirty).toBe(true)
+  p = type(p, 'return', 'x')
+  expect(p.lines).toEqual(['  foobar', '  x'])
+  expect([p.row, p.col]).toEqual([1, 3])
+  p = type(p, 'backspace', 'backspace', 'backspace', 'backspace')
+  expect(p.lines).toEqual(['  foobar'])
+  expect([p.row, p.col]).toEqual([0, 8])
+  p = type(doc(['ab', 'cd'], 0, 2), 'delete')
+  expect(p.lines).toEqual(['abcd'])
+})
+
+test('arrows wrap between lines and clamp to their length', () => {
+  let p = type(doc(['abc', 'x'], 0, 3), 'right')
+  expect([p.row, p.col]).toEqual([1, 0])
+  p = type(p, 'left')
+  expect([p.row, p.col]).toEqual([0, 3])
+  p = type(doc(['abcdef', 'x'], 0, 5), 'down')
+  expect([p.row, p.col]).toEqual([1, 1])
+})
+
+test('ctrl keys save, leave and undo; a paste inserts several lines', () => {
+  expect(reduceEdit(doc(['a']), { key: 's', ctrl: true }, 10).effect).toBe('save')
+  expect(reduceEdit(doc(['a']), { key: 'e', ctrl: true }, 10).effect).toBe('exit')
+  expect(reduceEdit(doc(['a']), { key: 'z', ctrl: true }, 10).effect).toBe('undo')
+  // ctrl+letter never types the letter.
+  expect(reduceEdit(doc(['a']), { key: 'q', ctrl: true }, 10).p.lines).toEqual(['a'])
+  const p = type(doc(['[]'], 0, 1), 'one\ntwo')
+  expect(p.lines).toEqual(['[one', 'two]'])
+})
+
+test('a save writes the shape the file was read in', () => {
+  const crlf = previewOf('w.txt', 'a\r\nb\r\n', 6)
+  expect(crlf.readOnly).toBe(null)
+  expect(textOf(crlf)).toBe('a\r\nb\r\n')
+  const noEol = previewOf('n.txt', 'a\nb', 3)
+  expect(textOf(noEol)).toBe('a\nb')
+  expect(textOf(previewOf('e.txt', '', 0))).toBe('')
+})
+
+test('files the preview had to alter are read-only', () => {
+  expect(previewOf('c', 'x\u001by\n', 4).readOnly).toContain('control')
+  expect(previewOf('m', 'a\r\nb\nc', 6).readOnly).toContain('mixed')
+  expect(previewOf('r', 'a\rb', 3).readOnly).toContain('mixed')
+  expect(previewOf('l', `${'x'.repeat(500)}\n`, 501).readOnly).toContain('longer than')
+  expect(previewOf('b', 'a\u0000', 2).readOnly).toBe('binary file')
+  expect(previewOf('ok.ts', 'const a = 1\n', 12).readOnly).toBe(null)
+})
+
+test('tabs: display columns and clicks map back to characters', () => {
+  expect(visualCol('\tab', 1)).toBe(2)
+  expect(colFromVisual('\tab', 0)).toBe(0)
+  expect(colFromVisual('\tab', 1)).toBe(0)
+  expect(colFromVisual('\tab', 2)).toBe(1)
+  expect(colFromVisual('ab', 9)).toBe(2)
+})
+
+// ---------------------------------------------------------------- editing, end to end
+
+/** An in-memory folder `/w` with one file, standing in for the engine's file system. */
+const disk = (on: On, files: Record<string, string>) => {
+  const mtimes: Record<string, number> = Object.fromEntries(Object.keys(files).map(f => [f, 1000]))
+  on('session.cwd', () => ({ value: '/w' }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('fs.list', () => ({
+    value: Object.keys(files).map(name => ({ name: name.slice(3), kind: 'file' as const, size: files[name]?.length ?? 0, mtimeMs: 1000, isLink: false })),
+  }))
+  on('fs.stat', (_$, e) => ({ value: { kind: 'file' as const, size: files[e.path]?.length ?? 0, mtimeMs: mtimes[e.path] ?? 0, isLink: false } }))
+  on('fs.read', (_$, e) => ({ value: files[e.path] ?? '' }))
+  on('fs.write', (_$, e) => {
+    files[e.path] = e.text
+    mtimes[e.path] = (mtimes[e.path] ?? 0) + 1000
+    return { value: undefined }
+  })
+  on('ui.toast', () => ({ value: undefined }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  // Another writer (Claude, an editor) changing a file: new text, newer mtime.
+  Object.defineProperty(files, 'writeOutside', {
+    enumerable: false,
+    value: (path: string, text: string) => {
+      files[path] = text
+      mtimes[path] = (mtimes[path] ?? 0) + 5000
+    },
+  })
+  return files as Record<string, string> & { writeOutside: (path: string, text: string) => void }
+}
+
+/** The props the pane handed the explorer client in the drawing now on screen. */
+type Node = { type?: string; props?: Record<string, unknown>; children?: unknown[] }
+async function explorerProps(ui: { drawn: () => Promise<unknown> }): Promise<Record<string, unknown>> {
+  const walk = (n: unknown): Record<string, unknown> | undefined => {
+    const node = n as Node
+    if (!node || typeof node !== 'object') return undefined
+    if (node.type === 'Client' && node.props?.key === 'explorer') return node.props.props as Record<string, unknown>
+    for (const c of node.children ?? []) {
+      const found = walk(c)
+      if (found) return found
+    }
+    return undefined
+  }
+  return walk(await ui.drawn()) ?? {}
+}
+
+test('open a file, press e, type, ctrl+s: the file on disk changes and the label says so', async ($, on) => {
+  engine(on)
+  const files = disk(on, { '/w/a.ts': 'const a = 1\n' })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await ui.key({ key: 'return', in: 'explorer' }) // open a.ts
+  expect((await explorerProps(ui)).fileMode).toBe('view')
+  await ui.key({ key: 'e', in: 'explorer' })
+  expect((await explorerProps(ui)).fileMode).toBe('edit')
+  await ui.key({ key: 'end', in: 'explorer' })
+  await ui.key({ key: '0', in: 'explorer' })
+  expect((await explorerProps(ui)).isDirty).toBe(true)
+  await ui.key({ key: 's', ctrl: true, in: 'explorer' })
+  expect(files['/w/a.ts']).toBe('const a = 10\n')
+  const after = await explorerProps(ui)
+  expect(after.isDirty).toBe(false)
+  expect(after.note).toBe('saved ✓')
+  await ui.key({ key: 'e', ctrl: true, in: 'explorer' })
+  expect((await explorerProps(ui)).fileMode).toBe('view')
+  await ui.unmount()
+})
+
+test('leaving with unsaved edits asks first; a second ctrl+e discards them', async ($, on) => {
+  engine(on)
+  const files = disk(on, { '/w/a.ts': 'x\n' })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await ui.key({ key: 'e', in: 'explorer' }) // from the list: open straight into edit mode
+  expect((await explorerProps(ui)).fileMode).toBe('edit')
+  await ui.key({ key: 'y', in: 'explorer' })
+  await ui.key({ key: 'e', ctrl: true, in: 'explorer' })
+  const warned = await explorerProps(ui)
+  expect(String(warned.note)).toContain('unsaved changes')
+  expect(warned.fileMode).toBe('edit')
+  await ui.key({ key: 'e', ctrl: true, in: 'explorer' })
+  expect((await explorerProps(ui)).fileMode).toBe('view')
+  expect(files['/w/a.ts']).toBe('x\n')
+  await ui.unmount()
+})
+
+test('a save refuses to overwrite a file changed on disk until pressed again', async ($, on) => {
+  engine(on)
+  const files = disk(on, { '/w/a.ts': 'x\n' })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await ui.key({ key: 'e', in: 'explorer' })
+  await ui.key({ key: 'y', in: 'explorer' })
+  // Someone else writes the file meanwhile.
+  files.writeOutside('/w/a.ts', 'theirs\n')
+  await ui.key({ key: 's', ctrl: true, in: 'explorer' })
+  expect(files['/w/a.ts']).toBe('theirs\n')
+  expect(String((await explorerProps(ui)).note)).toContain('changed on disk')
+  await ui.key({ key: 's', ctrl: true, in: 'explorer' })
+  expect(files['/w/a.ts']).toBe('yx\n')
+  await ui.unmount()
 })

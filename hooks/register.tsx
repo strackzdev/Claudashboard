@@ -2,7 +2,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Agent, Entry, Explorer, Vitals } from '../types'
+import type { Agent, Entry, Explorer, Preview, Vitals } from '../types'
 import {
   DEFAULT_EXPLORER,
   DEFAULT_VITALS,
@@ -20,6 +20,8 @@ import {
   joinPath,
   limitLabel,
   modeColorKey,
+  emptyPreview,
+  hasNoteRow,
   normalize,
   normalizeAgent,
   parentOf,
@@ -33,6 +35,7 @@ import {
   visibleEntries,
   windowTop,
 } from './core'
+import { colFromVisual, displayOf, reduceEdit, textOf, visualCol } from './editor'
 import type { ExplorerProps, Hint, Palette } from './explorer'
 
 const PANE = 'strackzdevhub'
@@ -46,7 +49,7 @@ const explorer = atom({ plugin: 'strackzdevhub', key: 'explorer' } as const, DEF
 const touched = atom({ plugin: 'strackzdevhub', key: 'touched' } as const, {})
 const agents = atom({ plugin: 'strackzdevhub', key: 'agents' } as const, [] as Agent[])
 
-type Colors = Palette & { ok: string; bad: string; info: string; purple: string; frame: string; pillFg: string }
+type Colors = Palette & { ok: string; bad: string; info: string; purple: string; frame: string }
 
 const ONE_DARK: Colors = {
   accent: '#61afef',
@@ -83,7 +86,22 @@ const THEME: Colors = {
 }
 
 const getVitals = async ($: EngineInterface) => normalize(DEFAULT_VITALS, await read($, vitals))
-const getExplorer = async ($: EngineInterface) => normalize(DEFAULT_EXPLORER, await read($, explorer))
+const getExplorer = async ($: EngineInterface): Promise<Explorer> => {
+  const ex = normalize(DEFAULT_EXPLORER, await read($, explorer))
+  // A preview stored by an older version lacks the editor's fields.
+  return ex.preview ? { ...ex, preview: emptyPreview(ex.preview.path, ex.preview) } : ex
+}
+
+/** Undo steps per file, newest last, and the text as last read or saved; the module's own, so a reload drops them. */
+const history = new Map<string, Array<Pick<Preview, 'lines' | 'row' | 'col'>>>()
+const saved = new Map<string, string[]>()
+const MAX_UNDO = 100
+
+const setPreview = ($: EngineInterface, fn: (p: Preview) => Preview) =>
+  update($, explorer, x => {
+    const ex = normalize(DEFAULT_EXPLORER, x)
+    return ex.preview ? { ...ex, preview: fn(emptyPreview(ex.preview.path, ex.preview)) } : ex
+  })
 const getTouched = async ($: EngineInterface): Promise<Record<string, number>> => (await read($, touched)) ?? {}
 const getAgents = async ($: EngineInterface): Promise<Agent[]> => {
   const list = await read($, agents)
@@ -124,13 +142,27 @@ async function loadDir($: EngineInterface, dir: string, select?: string) {
   }
 }
 
-async function loadPreview($: EngineInterface, path: string) {
+const absOf = (root: string, path: string) => (path.startsWith('/') ? path : joinPath(root, path))
+
+/** Reads `path` into the preview; `keep` carries the mode, cursor and scroll over a reload. */
+async function loadPreview($: EngineInterface, path: string, keep: Partial<Preview> = {}) {
   const ex = await getExplorer($)
-  const abs = path.startsWith('/') ? path : joinPath(ex.root, path)
+  const abs = absOf(ex.root, path)
   try {
     const st = await $.fs.stat(abs)
     const text = st.size > 1024 * 1024 ? '' : await $.fs.read(abs)
-    const preview = previewOf(path, text, st.size)
+    const fresh = previewOf(path, text, st.size, st.mtimeMs)
+    const isEdit = keep.mode === 'edit' && fresh.readOnly === null
+    const preview: Preview = {
+      ...fresh,
+      mode: isEdit ? 'edit' : 'view',
+      top: Math.min(keep.top ?? 0, Math.max(0, fresh.lines.length - 1)),
+      row: Math.min(keep.row ?? 0, Math.max(0, fresh.lines.length - 1)),
+      col: keep.col ?? 0,
+      status: keep.status ?? null,
+    }
+    history.delete(path)
+    saved.set(path, fresh.lines)
     await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), preview, error: null }))
   } catch (err) {
     await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), error: `cannot read ${path}: ${String(err)}` }))
@@ -139,6 +171,7 @@ async function loadPreview($: EngineInterface, path: string) {
 
 async function goUp($: EngineInterface) {
   const ex = await getExplorer($)
+  if (ex.preview?.mode === 'edit') return leaveEdit($)
   if (ex.preview) {
     await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), preview: null }))
     return
@@ -151,9 +184,91 @@ async function goUp($: EngineInterface) {
   return loadDir($, parentOf(ex.dir), ex.dir)
 }
 
-async function openEntry($: EngineInterface, entry: Entry) {
+async function openEntry($: EngineInterface, entry: Entry, edit = false) {
   if (entry.kind === 'dir') return loadDir($, entry.path)
-  return loadPreview($, entry.path)
+  await loadPreview($, entry.path)
+  if (edit) await enterEdit($)
+}
+
+// ---------------------------------------------------------------- editing
+
+async function enterEdit($: EngineInterface) {
+  await setPreview($, p =>
+    p.readOnly
+      ? { ...p, status: `read-only: ${p.readOnly}` }
+      : { ...p, mode: 'edit', row: Math.min(Math.max(p.row, p.top), Math.max(0, p.lines.length - 1)), status: null, confirm: null },
+  )
+}
+
+/** Back to view mode; with unsaved edits the first press warns and a second discards them. */
+async function leaveEdit($: EngineInterface) {
+  const p = (await getExplorer($)).preview
+  if (!p) return
+  if (!p.dirty) return setPreview($, x => ({ ...x, mode: 'view', status: null, confirm: null }))
+  if (p.confirm !== 'discard') {
+    return setPreview($, x => ({ ...x, status: 'unsaved changes: ctrl+s saves, ctrl+e again discards them', confirm: 'discard' }))
+  }
+  // Discard: read the file again as it is on disk.
+  await loadPreview($, p.path, { top: p.top, row: p.row, col: p.col, status: 'changes discarded' })
+}
+
+async function saveFile($: EngineInterface) {
+  const ex = await getExplorer($)
+  const p = ex.preview
+  if (!p || p.mode !== 'edit') return
+  if (p.readOnly) return setPreview($, x => ({ ...x, status: `read-only: ${p.readOnly}` }))
+  const abs = absOf(ex.root, p.path)
+  try {
+    const st = await $.fs.stat(abs).catch(() => null)
+    // Someone (Claude, another editor) changed the file since it was read: a second ctrl+s overwrites.
+    if (st && p.mtimeMs && Math.abs(st.mtimeMs - p.mtimeMs) > 1 && p.confirm !== 'overwrite') {
+      return setPreview($, x => ({ ...x, status: 'the file changed on disk: ctrl+s again overwrites it, ctrl+e twice reloads it', confirm: 'overwrite' }))
+    }
+    await $.fs.write(abs, textOf(p))
+    const after = await $.fs.stat(abs).catch(() => null)
+    saved.set(p.path, p.lines)
+    await setPreview($, x => ({ ...x, dirty: false, mtimeMs: after?.mtimeMs ?? x.mtimeMs, status: 'saved ✓', confirm: null }))
+    $.ui.toast(`Saved ${p.path}`)
+  } catch (err) {
+    await setPreview($, x => ({ ...x, status: `cannot save: ${String(err)}`, confirm: null }))
+  }
+}
+
+async function undoEdit($: EngineInterface, room: number) {
+  const p = (await getExplorer($)).preview
+  if (!p) return
+  const steps = history.get(p.path) ?? []
+  const last = steps.pop()
+  if (!last) return setPreview($, x => ({ ...x, status: 'nothing to undo' }))
+  const base = saved.get(p.path)
+  const isSaved = base !== undefined && base.length === last.lines.length && base.every((l, i) => l === last.lines[i])
+  await setPreview($, x => {
+    const rows = Math.max(1, hasNoteRow(x) ? room - 1 : room)
+    const top = last.row < x.top || last.row >= x.top + rows ? Math.max(0, last.row - Math.floor(rows / 2)) : x.top
+    return { ...x, ...last, top, dirty: !isSaved, status: null, confirm: null }
+  })
+}
+
+/** One key, a click on the mode label, or a click in the text, while editing. */
+async function editMessage($: EngineInterface, p: Preview, d: { k?: string; key?: string; ctrl?: boolean; meta?: boolean; row?: number; vis?: number }, room: number) {
+  if (d.k === 'mode' || d.k === 'crumb') return leaveEdit($)
+  if (d.k === 'place' && typeof d.row === 'number' && typeof d.vis === 'number') {
+    const row = Math.min(p.top + d.row, Math.max(0, p.lines.length - 1))
+    const col = colFromVisual(p.lines[row] ?? '', Math.max(0, d.vis))
+    return setPreview($, x => ({ ...x, row, col, confirm: null }))
+  }
+  if (d.k !== 'key' || typeof d.key !== 'string') return
+  const r = reduceEdit(p, { key: d.key, ...(d.ctrl ? { ctrl: true } : {}), ...(d.meta ? { meta: true } : {}) }, room)
+  if (r.effect === 'save') return saveFile($)
+  if (r.effect === 'exit') return leaveEdit($)
+  if (r.effect === 'undo') return undoEdit($, room)
+  if (r.changed) {
+    const steps = history.get(p.path) ?? []
+    steps.push({ lines: p.lines, row: p.row, col: p.col })
+    if (steps.length > MAX_UNDO) steps.shift()
+    history.set(p.path, steps)
+  }
+  if (r.p !== p) await setPreview($, () => r.p)
 }
 
 async function mention($: EngineInterface, path: string) {
@@ -194,6 +309,12 @@ async function noteEdit($: EngineInterface, e: unknown) {
   const ex = await getExplorer($)
   const path = relTo(ex.root, abs)
   await update($, touched, t => ({ ...(t ?? {}), [path]: ((t ?? {})[path] ?? 0) + 1 }))
+  // The file open in the preview changed under it: show the new text, unless the person has unsaved edits.
+  if (ex.preview && ex.preview.path === path) {
+    const p = emptyPreview(ex.preview.path, ex.preview)
+    if (p.dirty) await setPreview($, x => ({ ...x, status: 'Claude changed this file on disk: saving will ask before overwriting' }))
+    else await loadPreview($, p.path, { mode: p.mode, top: p.top, row: p.row, col: p.col, status: 'reloaded: Claude changed this file' })
+  }
   // A new file in the folder on screen shows without a manual refresh.
   if (!ex.preview && !ex.onlyTouched && parentOf(path) === ex.dir && !ex.entries.some(x => x.path === path)) await loadDir($, ex.dir)
   if (ex.onlyTouched) await loadDir($, ex.dir)
@@ -232,7 +353,7 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: 'strackzdevhub',
       description: 'STRACKZDEVHUB: open or close the hub, jump the explorer to a folder, or reset it',
-      argumentHint: '[close|cd <path>|reset]',
+      argumentHint: '[close|cd <path>|save|reset]',
     })
     await Promise.all([refreshUsage($), refreshModel($)]).catch(() => undefined)
     await initExplorer($, showHiddenDefault).catch(() => undefined)
@@ -258,6 +379,13 @@ export const register: Register = (on, options) => {
       await update($, explorer, () => DEFAULT_EXPLORER)
       await initExplorer($, showHiddenDefault)
       return { text: 'STRACKZDEVHUB reset: explorer back at the root, touched files and agents cleared.' }
+    }
+    if (verb === 'save') {
+      const p = (await getExplorer($)).preview
+      if (!p || p.mode !== 'edit') return { text: 'Nothing to save: open a file and press e to edit it.' }
+      await saveFile($)
+      const after = (await getExplorer($)).preview
+      return { text: `STRACKZDEVHUB: ${after?.status ?? 'saved'}` }
     }
     if (verb === 'cd') {
       const ex = await getExplorer($)
@@ -377,9 +505,17 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.message', async ($, e) => {
-    const d = e.data as { k?: string; key?: string; ctrl?: boolean; meta?: boolean; index?: number; room?: number }
+    const d = e.data as { k?: string; key?: string; ctrl?: boolean; meta?: boolean; index?: number; room?: number; row?: number; vis?: number }
     const room = Math.max(3, Number(d.room) || 10)
     const ex = await getExplorer($)
+    if (ex.preview?.mode === 'edit') {
+      await editMessage($, ex.preview, d, room)
+      return {}
+    }
+    if (d.k === 'mode') {
+      if (ex.preview) await enterEdit($)
+      return {}
+    }
     if (d.k === 'click' && typeof d.index === 'number') {
       const entry = visibleEntries(ex)[d.index]
       if (entry) {
@@ -396,7 +532,8 @@ export const register: Register = (on, options) => {
     if (d.k !== 'key' || typeof d.key !== 'string') return {}
     const { ex: nextEx, effect } = reduceKey(ex, { key: d.key, ...(d.ctrl ? { ctrl: true } : {}), ...(d.meta ? { meta: true } : {}) }, room)
     if (nextEx !== ex) await update($, explorer, () => nextEx)
-    if (effect?.kind === 'open') await openEntry($, effect.entry)
+    if (effect?.kind === 'open') await openEntry($, effect.entry, effect.edit === true)
+    else if (effect?.kind === 'edit') await enterEdit($)
     else if (effect?.kind === 'up') await goUp($)
     else if (effect?.kind === 'mention') await mention($, effect.path)
     else if (effect?.kind === 'reload') await loadDir($, nextEx.dir)
@@ -548,29 +685,58 @@ export const register: Register = (on, options) => {
 
     if (ex.preview) {
       const p = ex.preview
-      const codeRoom = p.note ? room - 1 : room
+      const isEdit = p.mode === 'edit'
+      const codeRoom = hasNoteRow(p) || ex.error ? room - 1 : room
       const end = Math.min(p.lines.length, p.top + codeRoom)
-      const hints: Hint[] = [
-        { key: '↑↓', label: 'scroll' },
-        { key: 'PgUp/Dn', label: 'page' },
-        { key: 'g/G', label: 'top/end' },
-        { key: '@', label: 'mention' },
-        { key: '⌫', label: 'back' },
-      ]
+      const hints: Hint[] = isEdit
+        ? [
+            { key: 'ctrl+s', label: 'save' },
+            { key: 'ctrl+e', label: 'view' },
+            { key: 'ctrl+z', label: 'undo' },
+            { key: 'click', label: 'place cursor' },
+          ]
+        : [
+            ...(p.readOnly ? [] : [{ key: 'e', label: 'edit' }]),
+            { key: '↑↓', label: 'scroll' },
+            { key: 'PgUp/Dn', label: 'page' },
+            { key: 'g/G', label: 'top/end' },
+            { key: '@', label: 'mention' },
+            { key: '⌫', label: 'back' },
+          ]
+      let edit: ExplorerProps['edit'] = null
+      if (isEdit) {
+        const gutterW = Math.max(3, String(end).length)
+        const textW = Math.max(4, inner - gutterW - 3)
+        const line = p.lines[p.row] ?? ''
+        const cursorVis = visualCol(line, p.col)
+        const hoff = cursorVis >= textW - 1 ? cursorVis - textW + 2 : 0
+        edit = {
+          lines: p.lines.slice(p.top, end).map(displayOf),
+          startLine: p.top + 1,
+          cursorRow: p.row - p.top,
+          cursorVis,
+          hoff,
+          gutterW,
+          textW,
+        }
+      }
       props = {
         mode: 'preview',
         crumbs: [rootName, ...p.path.split('/')],
-        counter: p.lines.length > codeRoom ? `${p.top + 1}–${end} / ${p.lines.length}` : `${p.lines.length} lines`,
+        counter: isEdit ? `Ln ${p.row + 1}, Col ${p.col + 1}` : p.lines.length > codeRoom ? `${p.top + 1}–${end} / ${p.lines.length}` : `${p.lines.length} lines`,
         filter: null,
         hints,
         rows: [],
         top: 0,
         room,
         width: inner,
-        code: end > p.top ? { source: p.lines.slice(p.top, end).join('\n'), path: p.path, startLine: p.top + 1 } : null,
-        note: ex.error ?? p.note,
+        code: !isEdit && end > p.top ? { source: p.lines.slice(p.top, end).join('\n'), path: p.path, startLine: p.top + 1 } : null,
+        note: ex.error ?? p.status ?? p.note,
         empty: null,
         colors: C,
+        fileMode: isEdit ? 'edit' : p.readOnly ? 'readonly' : 'view',
+        isDirty: p.dirty,
+        edit,
       }
     } else {
       const cursor = Math.min(ex.cursor, Math.max(0, rows.length - 1))
@@ -608,13 +774,16 @@ export const register: Register = (on, options) => {
         width: inner,
         code: null,
         note: null,
+        fileMode: null,
+        isDirty: false,
+        edit: null,
         empty: rows.length > 0 ? null : ex.error ?? (rows.length === 0 ? (ex.onlyTouched ? 'No files touched yet this session.' : ex.filter ? 'Nothing matches the filter.' : 'Empty folder.') : null),
         colors: C,
       }
     }
 
     const filesBox = (
-      <Box flexDirection="column" borderStyle="round" borderColor={ex.preview ? C.accent : C.frame} paddingX={1} width={W}>
+      <Box flexDirection="column" borderStyle="round" borderColor={ex.preview?.mode === 'edit' ? C.warn : ex.preview ? C.accent : C.frame} paddingX={1} width={W}>
         {hasClient ? (
           <els.Client key="explorer" module="./explorer.tsx" props={props} width={inner} height={room + 3} />
         ) : (

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 — 2026-10-13
+
+- **Edit files in the pane.** `e` switches to edit mode (from the preview, or from the list on a file); a **VIEW MODE / EDIT MODE / READ ONLY** label sits top right and toggles on click.
+- Editing: typing and paste, Enter with auto-indent, Backspace/Delete across lines, arrows, Home/End, paging, click to place the cursor; `ctrl+s` save, `ctrl+z` undo (100 steps), `ctrl+e` back to view (asks before discarding).
+- Saves keep line endings and the final newline; files the preview had to alter are read-only; a save never silently overwrites a file changed on disk.
+- `/strackzdevhub save`.
+
 ## 0.2.1 — 2026-10-13
 
 - Renamed to **STRACKZDEVHUB**; command `/strackzdevhub`.

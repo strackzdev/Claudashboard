@@ -129,22 +129,56 @@ export function windowTop(cursor: number, count: number, room: number): number {
   return Math.max(0, Math.min(cursor - Math.floor(room / 3), count - room))
 }
 
-/** Text the preview can draw: tab and newline the only control characters, long lines cut. */
-export function previewOf(path: string, text: string, size: number): Preview {
-  if (size > MAX_PREVIEW_BYTES) return { path, lines: [], top: 0, note: `${fmtSize(size)}: too large to preview` }
-  if (text.slice(0, 8000).includes('\u0000')) return { path, lines: [], top: 0, note: `binary file, ${fmtSize(size)}` }
+/** A preview with every field present: new, or stored by an older version. */
+export function emptyPreview(path: string, over: Partial<Preview> = {}): Preview {
+  return {
+    path,
+    lines: [],
+    top: 0,
+    note: null,
+    mode: 'view',
+    row: 0,
+    col: 0,
+    dirty: false,
+    mtimeMs: 0,
+    eol: true,
+    crlf: false,
+    readOnly: null,
+    status: null,
+    confirm: null,
+    ...over,
+  }
+}
+
+/** Whether a note or status line sits above the code, taking one of its rows. */
+export const hasNoteRow = (p: Preview) => Boolean(p.note || p.status)
+
+/**
+ * Text the preview can draw: tab and newline the only control characters, long lines cut.
+ * Whatever had to be altered to draw it makes the file read-only, so a save never writes the altered text.
+ */
+export function previewOf(path: string, text: string, size: number, mtimeMs = 0): Preview {
+  if (size > MAX_PREVIEW_BYTES) return emptyPreview(path, { note: `${fmtSize(size)}: too large to preview`, readOnly: 'too large', mtimeMs })
+  if (text.slice(0, 8000).includes('\u0000')) return emptyPreview(path, { note: `binary file, ${fmtSize(size)}`, readOnly: 'binary file', mtimeMs })
+  const crlf = text.includes('\r\n')
   const all = text.replace(/\r\n?/g, '\n').split('\n')
-  if (all.length > 1 && all[all.length - 1] === '') all.pop()
-  const lines = all.slice(0, MAX_PREVIEW_LINES).map(l =>
-    // eslint-disable-next-line no-control-regex
-    clipEnd(l.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ''), MAX_LINE),
-  )
+  const eol = all.length > 1 && all[all.length - 1] === ''
+  if (eol) all.pop()
+  // eslint-disable-next-line no-control-regex
+  const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f]/g
+  let readOnly: string | null = null
+  if (/\r(?!\n)/.test(text) || (crlf && /(?<!\r)\n/.test(text))) readOnly = 'mixed line endings'
+  else if (all.some(l => /[\u0000-\u0008\u000b-\u001f\u007f]/.test(l))) readOnly = 'control characters in the file'
+  else if (all.some(l => l.length > MAX_LINE)) readOnly = `lines longer than ${MAX_LINE} characters`
+  else if (all.length > MAX_PREVIEW_LINES) readOnly = `longer than ${MAX_PREVIEW_LINES} lines`
+  const lines = all.slice(0, MAX_PREVIEW_LINES).map(l => clipEnd(l.replace(CONTROL, ''), MAX_LINE))
   const note = all.length > MAX_PREVIEW_LINES ? `showing the first ${MAX_PREVIEW_LINES} of ${all.length} lines` : null
-  return { path, lines, top: 0, note }
+  return emptyPreview(path, { lines: lines.length ? lines : [''], note, eol, crlf, readOnly, mtimeMs })
 }
 
 export type Effect =
-  | { kind: 'open'; entry: Entry }
+  | { kind: 'open'; entry: Entry; edit?: true }
+  | { kind: 'edit' }
   | { kind: 'up' }
   | { kind: 'mention'; path: string }
   | { kind: 'reload' }
@@ -165,7 +199,7 @@ export function reduceKey(ex: Explorer, k: Key, room: number): { ex: Explorer; e
   if (ex.preview) {
     const p = ex.preview
     // A note above the code takes one of the rows.
-    const last = Math.max(0, p.lines.length - (p.note ? room - 1 : room))
+    const last = Math.max(0, p.lines.length - (hasNoteRow(p) ? room - 1 : room))
     const scroll = (top: number) => ({ ex: { ...ex, preview: { ...p, top: clamp(top, 0, last) } }, effect: null })
     if (key === 'backspace' || key === 'left' || key === 'h' || key === 'q') return { ex, effect: { kind: 'up' } }
     if (key === 'down' || key === 'j') return scroll(p.top + 1)
@@ -175,6 +209,7 @@ export function reduceKey(ex: Explorer, k: Key, room: number): { ex: Explorer; e
     if (key === 'home' || key === 'g') return scroll(0)
     if (key === 'end' || key === 'G') return scroll(last)
     if (key === '@') return { ex, effect: { kind: 'mention', path: p.path } }
+    if (key === 'e') return { ex, effect: { kind: 'edit' } }
     return { ex, effect: null }
   }
 
@@ -212,6 +247,7 @@ export function reduceKey(ex: Explorer, k: Key, room: number): { ex: Explorer; e
   if (key === 't') return { ex: { ...ex, onlyTouched: !ex.onlyTouched, filter: '', cursor: 0 }, effect: { kind: 'reload' } }
   if (key === 'r') return { ex, effect: { kind: 'reload' } }
   if (key === '@' && current) return { ex, effect: { kind: 'mention', path: current.path } }
+  if (key === 'e' && current && current.kind !== 'dir') return { ex, effect: { kind: 'open', entry: current, edit: true } }
   return { ex, effect: null }
 }
 

@@ -23,7 +23,25 @@ export type Preview = {
   path: string
   lines: string[]
   top: number
+  /** Why the file shows partly or not at all (too large, binary, truncated); drawn above the code. */
   note: string | null
+  mode: 'view' | 'edit'
+  /** The edit cursor: a line index and a character index into it. */
+  row: number
+  col: number
+  /** Edits not yet saved. */
+  dirty: boolean
+  /** The file's mtime when read or last saved: a save refuses to overwrite a newer file. */
+  mtimeMs: number
+  /** The file ended with a newline; it used CRLF line endings. Kept so a save writes the same shape. */
+  eol: boolean
+  crlf: boolean
+  /** Why this file cannot be edited, or null when it can. */
+  readOnly: string | null
+  /** A one-line message for the person (saved, read-only, unsaved changes); drawn above the code. */
+  status: string | null
+  /** A second press confirms: leaving with unsaved edits, or saving over a newer file. */
+  confirm: 'discard' | 'overwrite' | null
 }
 
 export type Explorer = {

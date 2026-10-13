@@ -34,7 +34,10 @@ export const DEFAULT_EXPLORER: Explorer = {
 /** The largest file the preview reads, and the most lines it keeps. */
 export const MAX_PREVIEW_BYTES = 1024 * 1024
 export const MAX_PREVIEW_LINES = 5000
-const MAX_LINE = 400
+/** Lines longer than this (minified code) are cut and make the file read-only. */
+const MAX_LINE = 10_000
+/** The most of one line the view mode draws: the rest of a long line is off screen anyway. */
+export const MAX_DRAWN = 1000
 
 // ---------------------------------------------------------------- formatting
 
@@ -169,7 +172,9 @@ export function previewOf(path: string, text: string, size: number, mtimeMs = 0)
   let readOnly: string | null = null
   if (/\r(?!\n)/.test(text) || (crlf && /(?<!\r)\n/.test(text))) readOnly = 'mixed line endings'
   else if (all.some(l => /[\u0000-\u0008\u000b-\u001f\u007f]/.test(l))) readOnly = 'control characters in the file'
-  else if (all.some(l => l.length > MAX_LINE)) readOnly = `lines longer than ${MAX_LINE} characters`
+  else if (all.some(l => l.length > MAX_LINE)) {
+    readOnly = `line ${all.findIndex(l => l.length > MAX_LINE) + 1} is longer than ${MAX_LINE} characters`
+  }
   else if (all.length > MAX_PREVIEW_LINES) readOnly = `longer than ${MAX_PREVIEW_LINES} lines`
   const lines = all.slice(0, MAX_PREVIEW_LINES).map(l => clipEnd(l.replace(CONTROL, ''), MAX_LINE))
   const note = all.length > MAX_PREVIEW_LINES ? `showing the first ${MAX_PREVIEW_LINES} of ${all.length} lines` : null

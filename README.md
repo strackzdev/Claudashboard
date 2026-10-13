@@ -120,7 +120,7 @@ A label at the top right of the file box shows the mode: **VIEW MODE** (blue), *
 
 **Safety:**
 - **Exact saves:** a save writes the file in the shape it was read, keeping its line endings (LF or CRLF) and whether it ends with a newline.
-- **Read-only files:** editing is off for any file the preview had to alter to show it, so a save can never write the altered text. That means binaries, files over 1 MB or 5,000 lines, files with control characters, lines over 400 characters, or mixed line endings. The label then reads **READ ONLY**, and pressing `e` says why.
+- **Read-only files:** editing is off for any file the preview had to alter to show it, so a save can never write the altered text. That means binaries, files over 1 MB or 5,000 lines, files with control characters, minified lines over 10,000 characters, or mixed line endings. The label then reads **READ ONLY**, with the reason right beside it.
 - **Changes made elsewhere:** if the file changed on disk after you opened it, for example because Claude edited it, `ctrl+s` warns first and only a second `ctrl+s` overwrites it. Without unsaved edits, the open file simply reloads when Claude changes it.
 
 Files Claude edited or created this session are marked **✎** in yellow, and new files appear automatically. The preview won't show binary files or files over 1 MB, and it shows at most the first 5,000 lines.

@@ -34,6 +34,8 @@ export type ExplorerProps = {
   colors: Palette
   /** The open file's mode, drawn as the label at the top right; null in the list. */
   fileMode: 'view' | 'edit' | 'readonly' | null
+  /** Why the open file cannot be edited: drawn beside the READ ONLY label. */
+  readOnly: string | null
   isDirty: boolean
   /** The editor's window: display lines (tabs expanded), the cursor in it, the gutter and text widths. */
   edit: EditView | null
@@ -88,6 +90,7 @@ function complete(raw: Partial<ExplorerProps> | null | undefined): ExplorerProps
     empty: typeof p.empty === 'string' ? p.empty : null,
     colors: { ...FALLBACK, ...(p.colors ?? {}) },
     fileMode: p.fileMode === 'view' || p.fileMode === 'edit' || p.fileMode === 'readonly' ? p.fileMode : null,
+    readOnly: typeof p.readOnly === 'string' ? p.readOnly : null,
     isDirty: p.isDirty === true,
     edit: p.edit && Array.isArray(p.edit.lines) ? p.edit : null,
   }
@@ -146,6 +149,7 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
         {props.fileMode ? (
           <Text>
             {'  '}
+            {props.fileMode === 'readonly' && props.readOnly ? <Text color={c.dim}>{`${props.readOnly} `}</Text> : null}
             {props.fileMode !== 'readonly' ? (
               <Text>
                 <Text color={c.accent} bold>

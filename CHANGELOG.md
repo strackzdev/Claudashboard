@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2 — 2026-10-13
+
+- Files with ordinary long lines (HTML, CSS) are editable: only lines over 10,000 characters (minified code) make a file read-only. Lines are kept whole; the view draws the first 1,000 characters of each.
+- A READ ONLY label says why beside it (e.g. `line 12 is longer than 10000 characters`).
+
 ## 0.3.1 — 2026-10-13
 
 - The shortcut sits beside the mode label (`e to edit` / `ctrl+e to view`), and `e edit` is in the file list's hints.

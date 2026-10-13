@@ -237,7 +237,11 @@ test('files the preview had to alter are read-only', () => {
   expect(previewOf('c', 'x\u001by\n', 4).readOnly).toContain('control')
   expect(previewOf('m', 'a\r\nb\nc', 6).readOnly).toContain('mixed')
   expect(previewOf('r', 'a\rb', 3).readOnly).toContain('mixed')
-  expect(previewOf('l', `${'x'.repeat(500)}\n`, 501).readOnly).toContain('longer than')
+  // Ordinary long lines (HTML, CSS) stay editable and whole; only minified-length lines are read-only.
+  const html = previewOf('p.html', `${'x'.repeat(458)}\n`, 459)
+  expect(html.readOnly).toBe(null)
+  expect(html.lines[0]?.length).toBe(458)
+  expect(previewOf('min.js', `a\n${'x'.repeat(10_001)}\n`, 10_003).readOnly).toBe('line 2 is longer than 10000 characters')
   expect(previewOf('b', 'a\u0000', 2).readOnly).toBe('binary file')
   expect(previewOf('ok.ts', 'const a = 1\n', 12).readOnly).toBe(null)
 })

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 — 2026-10-13
+
+- **Git gutter** beside every line, in view and edit mode: yellow = unsaved, green = added, blue = modified, red `▁` = lines deleted below, purple = staged. Layered like git: unsaved edits over unstaged changes over staged ones.
+- The footer counts them: `● 2 unsaved  +3 ~2 −1  ✓4 staged`.
+- The file list shows each file's git status (`M` modified, `S`/`A` staged, `U` untracked, `D` deleted, `!` conflict) and a `•` on folders holding changes.
+- Outside a git repo the gutter compares with the text as first opened, so saved edits still show (`since opened`).
+- Refreshes after each save, on leaving a file, after each Claude turn, and on `r` in the preview.
+
 ## 0.3.4 — 2026-10-13
 
 - Before the first reply, the Session box says `waiting for the 1st reply` / `after 1st reply` instead of bare dashes: Claude Code reports context and effort only once a reply arrives.

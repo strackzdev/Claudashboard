@@ -215,6 +215,7 @@ export function reduceKey(ex: Explorer, k: Key, room: number): { ex: Explorer; e
     if (key === 'end' || key === 'G') return scroll(last)
     if (key === '@') return { ex, effect: { kind: 'mention', path: p.path } }
     if (key === 'e') return { ex, effect: { kind: 'edit' } }
+    if (key === 'r') return { ex, effect: { kind: 'reload' } }
     return { ex, effect: null }
   }
 

@@ -17,7 +17,15 @@ export type Vitals = {
 }
 
 /** One explorer row; `path` is relative to the root, '/'-separated. */
-export type Entry = { name: string; path: string; kind: 'file' | 'dir' | 'other'; size: number; mtimeMs: number }
+export type Entry = {
+  name: string
+  path: string
+  kind: 'file' | 'dir' | 'other'
+  size: number
+  mtimeMs: number
+  /** git's two status letters for a file (`' M'`, `'M '`, `'??'`), `'•'` for a folder holding changes; absent outside a repo. */
+  git?: string
+}
 
 export type Preview = {
   path: string
@@ -81,6 +89,8 @@ declare module 'claude-code' {
       explorer: Explorer
       touched: Record<string, number>
       agents: Agent[]
+      /** Bumped when git data for the open file arrives, so the pane redraws its gutter. */
+      gitTick: number
     }
   }
 }

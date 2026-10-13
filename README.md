@@ -95,7 +95,7 @@ The explorer starts at the session's working directory.
 | `/` | filter by name as you type (`⏎` or `Tab` to finish) | — |
 | `.` | show / hide dotfiles | — |
 | `t` | only files Claude touched this session | — |
-| `r` | refresh | — |
+| `r` | refresh | refresh the git marks |
 | `@` | insert `@path` into your prompt | insert `@path` into your prompt |
 | `e` | open the file straight into edit mode | switch to edit mode |
 
@@ -122,6 +122,22 @@ A label at the top right of the file box shows the mode: **VIEW MODE** (blue), *
 - **Exact saves:** a save writes the file in the shape it was read, keeping its line endings (LF or CRLF) and whether it ends with a newline.
 - **Read-only files:** editing is off for any file the preview had to alter to show it, so a save can never write the altered text. That means binaries, files over 1 MB or 5,000 lines, files with control characters, minified lines over 10,000 characters, or mixed line endings. The label then reads **READ ONLY**, and the reason shows on the line above the code.
 - **Changes made elsewhere:** if the file changed on disk after you opened it, for example because Claude edited it, `ctrl+s` warns first and only a second `ctrl+s` overwrites it. Without unsaved edits, the open file simply reloads when Claude changes it.
+
+### Git changes
+
+Every line of an open file has a gutter mark, in view mode and edit mode, layered the way git sees the file:
+
+| Mark | Means |
+| --- | --- |
+| yellow `▎` | edited here, **not saved** yet |
+| green `▎` | **added** since the index (not staged) |
+| blue `▎` | **modified** since the index (not staged) |
+| red `▁` | lines **deleted** just below this one |
+| purple `▎` | **staged** (`git add`ed), not yet committed |
+
+The footer adds them up, for example `● 2 unsaved  +3 ~2 −1  ✓4 staged`. In the file list, each file shows its git status: `M` modified, `S` or `A` staged, `U` untracked, `D` deleted, `!` conflict. Folders holding changes get a `•`.
+
+Outside a git repository, the gutter compares the file with how it was when you first opened it, so lines you changed and saved still show (`since opened`). The marks refresh after each save, when you leave the file, after each Claude turn, and when you press `r` in the preview.
 
 Files Claude edited or created this session are marked **✎** in yellow, and new files appear automatically. The preview won't show binary files or files over 1 MB, and it shows at most the first 5,000 lines.
 
@@ -157,6 +173,7 @@ Open `/config` and find **strackzdevhub**, or set the values under `pluginConfig
 hooks/register.tsx   hooks: vitals, agents, commands, the pane drawing
 hooks/explorer.tsx   the explorer's client module (keys, clicks, list, preview, editor)
 hooks/editor.ts      pure editor logic: keys against the text, cursor, tabs (unit-tested)
+hooks/gitdiff.ts     pure line diff and git status parsing for the gutter (unit-tested)
 hooks/elapsed.tsx    a live timer that ticks without redrawing the pane
 hooks/core.ts        pure logic: formatting, paths, the key reducer (unit-tested)
 types/index.d.ts     the mod's $.state contract

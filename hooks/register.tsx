@@ -38,7 +38,9 @@ import {
   windowTop,
 } from './core'
 import { colFromVisual, displayOf, reduceEdit, textOf, visualCol } from './editor'
-import type { ExplorerProps, Hint, Palette } from './explorer'
+import { lineMarks, parsePorcelain, splitText, statusLetter } from './gitdiff'
+import type { LineMark } from './gitdiff'
+import type { ExplorerProps, GutterMark, Hint, Palette } from './explorer'
 
 const PANE = 'strackzdevhub'
 const TITLE = 'STRACKZDEVHUB'
@@ -50,6 +52,7 @@ const vitals = atom({ plugin: 'strackzdevhub', key: 'vitals' } as const, DEFAULT
 const explorer = atom({ plugin: 'strackzdevhub', key: 'explorer' } as const, DEFAULT_EXPLORER)
 const touched = atom({ plugin: 'strackzdevhub', key: 'touched' } as const, {})
 const agents = atom({ plugin: 'strackzdevhub', key: 'agents' } as const, [] as Agent[])
+const gitTick = atom({ plugin: 'strackzdevhub', key: 'gitTick' } as const, 0)
 
 type Colors = Palette & { ok: string; bad: string; info: string; purple: string; frame: string }
 
@@ -99,6 +102,83 @@ const history = new Map<string, Array<Pick<Preview, 'lines' | 'row' | 'col'>>>()
 const saved = new Map<string, string[]>()
 const MAX_UNDO = 100
 
+// ---------------------------------------------------------------- git
+
+/** What each open file is compared against: git's HEAD and index, or (outside git) the text as first opened. */
+type Base = { repo: boolean; head: string[]; index: string[] }
+const bases = new Map<string, Base>()
+/** The text of each file as first opened this session: the base outside git. */
+const opened = new Map<string, string[]>()
+const fetching = new Set<string>()
+
+const git = ($: EngineInterface, cwd: string, args: string[]) =>
+  $.process.run(['git', '-C', cwd, ...args], { timeoutMs: 5000 }).catch(() => ({ exitCode: -1, stdout: '', stderr: '' }))
+
+/** The repository's top folder holding `dir`, or null outside git. */
+async function repoTop($: EngineInterface, dir: string): Promise<string | null> {
+  const r = await git($, dir, ['rev-parse', '--show-toplevel'])
+  return r.exitCode === 0 ? r.stdout.trim() || null : null
+}
+
+/** Reads HEAD's and the index's copy of the open file, then redraws its gutter. */
+async function fetchBase($: EngineInterface, root: string, path: string) {
+  if (fetching.has(path)) return
+  fetching.add(path)
+  try {
+    const abs = absOf(root, path)
+    const top = await repoTop($, parentOf(abs) || '/')
+    const first = opened.get(path) ?? []
+    if (!top) {
+      bases.set(path, { repo: false, head: first, index: first })
+    } else {
+      const rel = relTo(top, abs)
+      const [head, index] = await Promise.all([git($, top, ['show', `HEAD:${rel}`]), git($, top, ['show', `:${rel}`])])
+      // Not in HEAD (a new file) or not in the index (untracked): every line counts as added.
+      bases.set(path, {
+        repo: true,
+        head: head.exitCode === 0 ? splitText(head.stdout) : [],
+        index: index.exitCode === 0 ? splitText(index.stdout) : [],
+      })
+    }
+    await update($, gitTick, n => (n ?? 0) + 1)
+  } finally {
+    fetching.delete(path)
+  }
+}
+
+/** git status letters for the entries of `dir`: a letter per changed file, a dot on folders holding changes. */
+async function gitStatusOf($: EngineInterface, root: string, dir: string, entries: Entry[]): Promise<Entry[]> {
+  const absDir = absOf(root, dir)
+  const top = await repoTop($, absDir)
+  if (!top) return entries
+  const r = await git($, absDir, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', '.'])
+  if (r.exitCode !== 0) return entries
+  const status = parsePorcelain(r.stdout)
+  const keys = [...status.keys()]
+  return entries.map(e => {
+    const rel = relTo(top, absOf(root, e.path))
+    if (e.kind === 'dir') return keys.some(k => k.startsWith(`${rel}/`)) ? { ...e, git: '•' } : e
+    const xy = status.get(rel)
+    return xy ? { ...e, git: xy } : e
+  })
+}
+
+/** Refreshes the git letters of the folder on screen, and the open file's base. */
+async function refreshGit($: EngineInterface) {
+  const ex = await getExplorer($)
+  if (ex.preview) {
+    bases.delete(ex.preview.path)
+    await fetchBase($, ex.root, ex.preview.path)
+  }
+  if (!ex.onlyTouched && ex.entries.length) {
+    const entries = await gitStatusOf($, ex.root, ex.dir, ex.entries.map(e => ({ ...e, git: undefined })))
+    await update($, explorer, x => {
+      const cur = normalize(DEFAULT_EXPLORER, x)
+      return cur.dir === ex.dir ? { ...cur, entries } : cur
+    })
+  }
+}
+
 const setPreview = ($: EngineInterface, fn: (p: Preview) => Preview) =>
   update($, explorer, x => {
     const ex = normalize(DEFAULT_EXPLORER, x)
@@ -133,7 +213,8 @@ async function listDir($: EngineInterface, root: string, dir: string): Promise<E
 async function loadDir($: EngineInterface, dir: string, select?: string) {
   const ex = await getExplorer($)
   try {
-    const entries = ex.onlyTouched ? touchedEntries(await getTouched($)) : await listDir($, ex.root, dir)
+    const listed = ex.onlyTouched ? touchedEntries(await getTouched($)) : await listDir($, ex.root, dir)
+    const entries = await gitStatusOf($, ex.root, dir, listed).catch(() => listed)
     await update($, explorer, x => {
       const next: Explorer = { ...normalize(DEFAULT_EXPLORER, x), dir, entries, preview: null, error: null, cursor: 0 }
       const at = select ? visibleEntries(next).findIndex(e => e.path === select) : -1
@@ -165,6 +246,9 @@ async function loadPreview($: EngineInterface, path: string, keep: Partial<Previ
     }
     history.delete(path)
     saved.set(path, fresh.lines)
+    if (!opened.has(path)) opened.set(path, fresh.lines)
+    bases.delete(path)
+    void fetchBase($, ex.root, path).catch(() => undefined)
     await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), preview, error: null }))
   } catch (err) {
     await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), error: `cannot read ${path}: ${String(err)}` }))
@@ -176,6 +260,7 @@ async function goUp($: EngineInterface) {
   if (ex.preview?.mode === 'edit') return leaveEdit($)
   if (ex.preview) {
     await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), preview: null }))
+    void refreshGit($).catch(() => undefined)
     return
   }
   if (ex.onlyTouched) {
@@ -347,6 +432,12 @@ async function noteSpawn(
   await update($, agents, list => [...(list ?? []).filter(a => a.id !== agent.id), agent].slice(-24))
 }
 
+/** One gutter cell: a bar for an added or modified line, a low bar where lines were deleted. */
+function gutterMark(m: LineMark): GutterMark | null {
+  if (!m.layer) return null
+  return { glyph: m.change ? '▎' : '▁', tone: m.layer === 'unsaved' ? 'unsaved' : m.layer === 'staged' ? 'staged' : m.change ?? 'deleted' }
+}
+
 export const register: Register = (on, options) => {
   const C = options.palette === 'theme' ? THEME : ONE_DARK
   const showHiddenDefault = options.showHidden === true
@@ -452,6 +543,7 @@ export const register: Register = (on, options) => {
       await update($, agents, list => (list ?? []).filter(a => a.id !== id)).catch(() => undefined)
       return done
     }
+    void refreshGit($).catch(() => undefined)
     const [now, u] = await Promise.all([$.clock.now(), $.session.usage().catch(() => null)])
     await update($, vitals, x => {
       const v = normalize(DEFAULT_VITALS, x)
@@ -538,7 +630,7 @@ export const register: Register = (on, options) => {
     else if (effect?.kind === 'edit') await enterEdit($)
     else if (effect?.kind === 'up') await goUp($)
     else if (effect?.kind === 'mention') await mention($, effect.path)
-    else if (effect?.kind === 'reload') await loadDir($, nextEx.dir)
+    else if (effect?.kind === 'reload') await (nextEx.preview ? refreshGit($) : loadDir($, nextEx.dir))
     return {}
   })
 
@@ -546,7 +638,7 @@ export const register: Register = (on, options) => {
     const els = $.ui.resolve(e)
     const { Box, Text } = els
     const hasClient = 'Client' in els
-    const [v, ex, t, list, now] = await Promise.all([getVitals($), getExplorer($), getTouched($), getAgents($), $.clock.now()])
+    const [v, ex, t, list, now] = await Promise.all([getVitals($), getExplorer($), getTouched($), getAgents($), $.clock.now(), read($, gitTick)])
     // The pane's real width: drawing wider than it would overflow; every row below truncates instead.
     const W = Math.max(24, e.props.bodyColumns)
     const inner = W - 4 // a section's round border and its one-cell padding each side
@@ -711,10 +803,16 @@ export const register: Register = (on, options) => {
             { key: '@', label: 'mention' },
             { key: '⌫', label: 'back' },
           ]
+      // The git gutter: every line's layer and change, for the lines in view.
+      const base = bases.get(p.path)
+      if (!base) void fetchBase($, ex.root, p.path).catch(() => undefined)
+      const diff = base ? lineMarks({ head: base.head, index: base.index, disk: saved.get(p.path) ?? p.lines, buffer: p.lines }) : null
+      const gutter = diff ? diff.marks.slice(p.top, end).map(gutterMark) : null
+      const changes = diff ? { ...diff.summary, repo: base?.repo ?? false } : null
       let edit: ExplorerProps['edit'] = null
       if (isEdit) {
         const gutterW = Math.max(3, String(end).length)
-        const textW = Math.max(4, inner - gutterW - 3)
+        const textW = Math.max(4, inner - gutterW - 4)
         const line = p.lines[p.row] ?? ''
         const cursorVis = visualCol(line, p.col)
         const hoff = cursorVis >= textW - 1 ? cursorVis - textW + 2 : 0
@@ -748,6 +846,8 @@ export const register: Register = (on, options) => {
         label: null,
         labelHint: null,
         dirtyMark: null,
+        gutter,
+        changes,
         edit,
       }
     } else {
@@ -781,6 +881,7 @@ export const register: Register = (on, options) => {
           isDir: r.kind === 'dir',
           isTouched: (t[r.path] ?? 0) > 0,
           isSelected: top + i === cursor,
+          git: r.git === '•' ? { letter: '•', tone: 'modified' as const } : r.git ? statusLetter(r.git) : null,
         })),
         top,
         room,
@@ -793,6 +894,8 @@ export const register: Register = (on, options) => {
         label: null,
         labelHint: null,
         dirtyMark: null,
+        gutter: null,
+        changes: null,
         edit: null,
         empty: rows.length > 0 ? null : ex.error ?? (rows.length === 0 ? (ex.onlyTouched ? 'No files touched yet this session.' : ex.filter ? 'Nothing matches the filter.' : 'Empty folder.') : null),
         colors: C,

@@ -2,7 +2,23 @@
 // It holds no explorer state of its own; a click inside gives it the keyboard, Esc hands it back.
 import type { ClientModule } from 'claude-code'
 
-export type Row = { icon: string; label: string; meta: string; isDir: boolean; isTouched: boolean; isSelected: boolean }
+export type GitLetter = { letter: string; tone: 'staged' | 'modified' | 'untracked' | 'deleted' | 'conflict' }
+
+export type Row = {
+  icon: string
+  label: string
+  meta: string
+  isDir: boolean
+  isTouched: boolean
+  isSelected: boolean
+  /** The file's git status letter, or a dot on a folder holding changes. */
+  git: GitLetter | null
+}
+
+/** One gutter cell beside a line: a bar coloured by what changed it, a low bar where lines were deleted. */
+export type GutterMark = { glyph: string; tone: 'unsaved' | 'added' | 'modified' | 'deleted' | 'staged' }
+
+export type Changes = { unsaved: number; added: number; modified: number; deleted: number; staged: number; repo: boolean }
 
 export type Palette = {
   accent: string
@@ -14,6 +30,9 @@ export type Palette = {
   hoverBg: string
   warn: string
   pillFg: string
+  ok: string
+  bad: string
+  purple: string
 }
 
 export type Hint = { key: string; label: string }
@@ -41,6 +60,9 @@ export type ExplorerProps = {
   label: string | null
   labelHint: Hint | null
   dirtyMark: string | null
+  /** The git gutter for the lines in view (null: no data yet), and the file's change counts. */
+  gutter: Array<GutterMark | null> | null
+  changes: Changes | null
   /** The editor's window: display lines (tabs expanded), the cursor in it, the gutter and text widths. */
   edit: EditView | null
 }
@@ -72,6 +94,9 @@ const FALLBACK: Palette = {
   hoverBg: 'subtle',
   warn: 'warning',
   pillFg: 'inverseText',
+  ok: 'success',
+  bad: 'error',
+  purple: 'permission',
 }
 
 /** Props as they may arrive: from an older load of the hooks module, or partial. Never throws. */
@@ -84,7 +109,7 @@ function complete(raw: Partial<ExplorerProps> | null | undefined): ExplorerProps
     counter: typeof p.counter === 'string' ? p.counter : '',
     filter: typeof p.filter === 'string' ? p.filter : null,
     hints: arr(p.hints),
-    rows: arr(p.rows),
+    rows: arr(p.rows).map(r => ({ ...r, git: r.git ?? null })),
     top: typeof p.top === 'number' ? p.top : 0,
     room: typeof p.room === 'number' ? p.room : 10,
     width: typeof p.width === 'number' ? p.width : 60,
@@ -98,6 +123,8 @@ function complete(raw: Partial<ExplorerProps> | null | undefined): ExplorerProps
     label: typeof p.label === 'string' ? p.label : null,
     labelHint: p.labelHint && typeof p.labelHint.key === 'string' ? p.labelHint : null,
     dirtyMark: typeof p.dirtyMark === 'string' ? p.dirtyMark : null,
+    gutter: Array.isArray(p.gutter) ? p.gutter : null,
+    changes: p.changes && typeof p.changes.added === 'number' ? p.changes : null,
     edit: p.edit && Array.isArray(p.edit.lines) ? p.edit : null,
   }
 }
@@ -123,7 +150,7 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
       if (cur.edit) {
         const row = p.y - HEAD - (cur.note ? 1 : 0)
         if (row < 0 || row >= cur.edit.lines.length) return
-        const vis = p.x - cur.edit.gutterW - 3 + (row === cur.edit.cursorRow ? cur.edit.hoff : 0)
+        const vis = p.x - cur.edit.gutterW - 4 + (row === cur.edit.cursorRow ? cur.edit.hoff : 0)
         return surface.post({ k: 'place', row, vis, room: cur.room })
       }
       const i = p.y - HEAD
@@ -132,10 +159,19 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
   }
 
   const c = props.colors
+  const markColor = (t: GutterMark['tone']) =>
+    t === 'unsaved' ? c.warn : t === 'added' ? c.ok : t === 'modified' ? c.accent : t === 'deleted' ? c.bad : c.purple
+  const letterColor = (t: GitLetter['tone']) =>
+    t === 'staged' || t === 'untracked' ? c.ok : t === 'modified' ? c.warn : c.bad
+  const markAt = (i: number) => {
+    const m = props.gutter?.[i]
+    return m ? <Text color={markColor(m.tone)}>{m.glyph}</Text> : <Text> </Text>
+  }
   const W = Math.max(20, props.width)
   const metaW = props.mode === 'list' ? Math.min(20, Math.max(0, W - 24)) : 0
-  const nameW = Math.max(6, W - metaW - 4)
+  const nameW = Math.max(6, W - metaW - 6)
 
+  const ch = props.changes
   const pillBg = props.fileMode === 'edit' ? c.warn : props.fileMode === 'view' ? c.accent : c.dim
   const crumbs = (
     <Box flexDirection="row" justifyContent="space-between" width={W}>
@@ -191,6 +227,9 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
             <Text backgroundColor={bg} color={r.isTouched ? c.touched : r.isDir ? c.dir : c.dim} hover={{ backgroundColor: c.hoverBg }}>
               {`${r.isTouched ? '✎' : r.icon} `}
             </Text>
+            <Text backgroundColor={bg} color={r.git ? letterColor(r.git.tone) : c.dim} bold hover={{ backgroundColor: c.hoverBg }}>
+              {`${r.git?.letter ?? ' '} `}
+            </Text>
             <Box width={nameW}>
               <Text
                 backgroundColor={bg}
@@ -223,6 +262,7 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
         if (i !== ev.cursorRow) {
           return (
             <Text wrap="truncate-end">
+              {markAt(i)}
               <Text color={c.dim}>{gutter}</Text>
               <Text color={c.text}>{line.slice(0, ev.textW)}</Text>
             </Text>
@@ -235,6 +275,7 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
         const after = shown.slice(at + 1, Math.max(at + 1, ev.textW))
         return (
           <Text wrap="truncate-end">
+            {markAt(i)}
             <Text color={c.warn} bold>
               {gutter}
             </Text>
@@ -262,7 +303,14 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
       ) : null}
       {editor}
       {props.code && props.code.source ? (
-        <Code source={props.code.source} path={props.code.path} startLine={props.code.startLine} wrap="truncate-end" />
+        <Box flexDirection="row" width={W}>
+          <Box flexDirection="column" width={1} flexShrink={0}>
+            {props.code.source.split('\n').map((_, i) => markAt(i))}
+          </Box>
+          <Box flexDirection="column" width={W - 1}>
+            <Code source={props.code.source} path={props.code.path} startLine={props.code.startLine} wrap="truncate-end" />
+          </Box>
+        </Box>
       ) : null}
     </Box>
   )
@@ -286,9 +334,18 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
             ))}
           </Text>
         </Box>
-        {props.counter ? (
+        {props.counter || ch ? (
           <Box flexShrink={0} marginLeft={2}>
-            <Text color={c.dim}>{props.counter}</Text>
+            <Text>
+              {ch && ch.unsaved ? <Text color={c.warn}>{`● ${ch.unsaved} unsaved  `}</Text> : null}
+              {ch && ch.added ? <Text color={c.ok}>{`+${ch.added} `}</Text> : null}
+              {ch && ch.modified ? <Text color={c.accent}>{`~${ch.modified} `}</Text> : null}
+              {ch && ch.deleted ? <Text color={c.bad}>{`−${ch.deleted} `}</Text> : null}
+              {ch && ch.staged ? <Text color={c.purple}>{`✓${ch.staged} staged `}</Text> : null}
+              {ch && !ch.repo && (ch.added || ch.modified || ch.deleted) ? <Text color={c.dim}>{'since opened '}</Text> : null}
+              {ch && (ch.unsaved || ch.added || ch.modified || ch.deleted || ch.staged) ? <Text color={c.dim}>{' '}</Text> : null}
+              <Text color={c.dim}>{props.counter}</Text>
+            </Text>
           </Box>
         ) : null}
       </Box>

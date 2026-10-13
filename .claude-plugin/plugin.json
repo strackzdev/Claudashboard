@@ -1,6 +1,6 @@
 {
   "name": "strackzdevhub",
-  "version": "0.3.4",
+  "version": "0.4.0",
   "description": "STRACKZDEVHUB: a clean hub pane for Claude Code. Session vitals (model, effort, context, cost, rate limits), live subagent cards, and a mouse + keyboard file explorer with in-pane preview and editor",
   "author": {
     "name": "strackzdev"

@@ -22,6 +22,7 @@ import {
   windowTop,
 } from '../hooks/core'
 import { colFromVisual, reduceEdit, textOf, visualCol } from '../hooks/editor'
+import { diffLines, lineMarks, parsePorcelain, statusLetter } from '../hooks/gitdiff'
 import type { Entry, Explorer } from '../types'
 
 const file = (path: string, kind: Entry['kind'] = 'file'): Entry => ({
@@ -403,4 +404,71 @@ test('the file box header fits every width, and the mode label never leaves', ()
   expect(wide.hint?.key).toBe('e')
   const narrow = fitHeader({ width: 30, crumbs: path, filter: null, mode: 'edit', isDirty: true })
   expect(narrow.label).toBe(' EDIT ')
+})
+
+// ---------------------------------------------------------------- git gutter
+
+test('a line diff tells added, modified and deleted lines apart', () => {
+  const d = diffLines(['a', 'b', 'c', 'd'], ['a', 'B', 'c', 'x', 'd'])
+  expect(d.marks).toEqual([null, 'modified', null, 'added', null])
+  const del = diffLines(['a', 'b', 'c'], ['a', 'c'])
+  expect(del.marks).toEqual([null, null])
+  expect(del.deletedAfter).toEqual([true, false])
+  expect(del.deletedCount).toBe(1)
+  expect(diffLines(['same'], ['same']).marks).toEqual([null])
+})
+
+test('the gutter layers unsaved over unstaged over staged', () => {
+  const head = ['one', 'two', 'three', 'four']
+  const index = ['one', 'TWO', 'three', 'four'] // staged: line 2
+  const disk = ['one', 'TWO', 'three', 'FOUR'] // unstaged: line 4
+  const buffer = ['zero', 'one', 'TWO', 'three', 'FOUR'] // unsaved: a new first line
+  const { marks, summary } = lineMarks({ head, index, disk, buffer })
+  expect(marks.map(m => m.layer)).toEqual(['unsaved', null, 'staged', null, 'unstaged'])
+  expect(marks[4]?.change).toBe('modified')
+  expect(summary).toEqual({ unsaved: 1, added: 0, modified: 1, deleted: 0, staged: 1 })
+})
+
+test('git status letters: staged, modified, untracked, renamed', () => {
+  const st = parsePorcelain('M  a.ts\0 M b.ts\0?? c.ts\0R  new.ts\0old.ts\0')
+  expect([...st.keys()]).toEqual(['a.ts', 'b.ts', 'c.ts', 'new.ts'])
+  expect(statusLetter(st.get('a.ts') ?? '')).toEqual({ letter: 'S', tone: 'staged' })
+  expect(statusLetter(st.get('b.ts') ?? '')).toEqual({ letter: 'M', tone: 'modified' })
+  expect(statusLetter('MM')).toEqual({ letter: 'M', tone: 'modified' })
+  expect(statusLetter('??')).toEqual({ letter: 'U', tone: 'untracked' })
+  expect(statusLetter('A ')).toEqual({ letter: 'A', tone: 'staged' })
+})
+
+/** A repository at /w where a.ts is committed as `committed`, and the index as given. */
+const repo = (on: On, committed: string, staged: string, status: string) => {
+  const out = (exitCode: number, stdout: string) => ({ value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
+  on('process.run', (_$, e) => {
+    const args = e.argv.slice(3).join(' ')
+    if (args === 'rev-parse --show-toplevel') return out(0, '/w\n')
+    if (args === 'show HEAD:a.ts') return out(0, committed)
+    if (args === 'show :a.ts') return out(0, staged)
+    if (args.startsWith('status')) return out(0, status)
+    return out(1, '')
+  })
+}
+
+test('in a repo, the list shows git letters and the file shows its changed lines', async ($, on) => {
+  engine(on)
+  disk(on, { '/w/a.ts': 'one\nTWO\nthree\n' })
+  repo(on, 'one\ntwo\nthree\n', 'one\ntwo\nthree\n', ' M a.ts\0')
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  const listed = await explorerProps(ui)
+  expect((listed.rows as Array<{ git: unknown }>)[0]?.git).toEqual({ letter: 'M', tone: 'modified' })
+  await ui.key({ key: 'return', in: 'explorer' })
+  const viewed = await explorerProps(ui)
+  expect(viewed.gutter).toEqual([null, { glyph: '▎', tone: 'modified' }, null])
+  expect((viewed.changes as { modified: number }).modified).toBe(1)
+  // Edit line 1 without saving: it shows as unsaved.
+  await ui.key({ key: 'e', in: 'explorer' })
+  await ui.key({ key: 'x', in: 'explorer' })
+  const edited = await explorerProps(ui)
+  expect((edited.gutter as unknown[])[0]).toEqual({ glyph: '▎', tone: 'unsaved' })
+  expect((edited.changes as { unsaved: number }).unsaved).toBe(1)
+  await ui.unmount()
 })

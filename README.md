@@ -180,46 +180,13 @@ Open `/config` and find **strackzdevhub**, or set the values under `pluginConfig
 
 ## Develop
 
-```
-hooks/register.tsx        wires the engine's events and the /strackzdevhub command to the modules below
-hooks/state.ts            the stored state: every atom, and every read and update of one
-hooks/files.ts            the explorer's I/O: folder listings, the preview's file, the live refresh
-hooks/git.ts              git status for the list and the project bar, the gutter's base
-hooks/editing.ts          the editor's lifecycle: enter, leave, save, undo
-hooks/picture.ts          pictures: PNGs as they are, other formats converted with ImageMagick or ffmpeg
-hooks/pane.tsx            the pane's drawing: session, agents, files
-hooks/explorer.tsx        the explorer's client module (keys, clicks, list, preview, editor)
-hooks/elapsed.tsx         a live timer that ticks without redrawing the pane
-
-pure, no `$`, each with its own test file:
-hooks/explorer-props.ts   the props the explorer client draws
-hooks/explorer-state.ts   defaults, sorting, the preview, the key reducer
-hooks/editor.ts           keys against the text, cursor, tabs
-hooks/gitdiff.ts          line diff and git status parsing for the gutter
-hooks/format.ts           money, tokens, sizes, times, models, clipping
-hooks/paths.ts            join, parent, base name, relative
-hooks/agents.ts           tool descriptions, step usage
-hooks/header.ts           fitting the file box's header and breadcrumb
-hooks/media.ts            markdown windows, PNG sizes, picture fitting
-types/index.d.ts          the mod's $.state contract
-tests/                    claude plugin test: one file per pure module, pane.test.ts end to end
-```
-
-Two rules the engine checks when it loads the hooks, and reports only as "hooks module did not load":
-
-- A helper that receives `$` from another file is a `function` declaration, not an arrow function in a `const`.
-- `read` and `update` of an atom happen only in `hooks/state.ts`, the file that declares it; other modules call its helpers.
-
-New logic goes in a pure module with a test; the I/O modules stay thin.
-
 ```sh
 claude plugin validate .     # manifest, marketplace and hooks, as the engine reads them
 claude plugin test .         # unit and drawing tests
-npx prettier --write hooks tests   # the house style (.prettierrc); CI checks it
 claude --plugin-dir .        # a session with your working copy loaded, hot-reloading on save
 ```
 
-Once the mod has loaded, `.claude-plugin/types/` holds the engine's typings, so `npx tsc -p .` type-checks the code.
+Start with [AGENTS.md](AGENTS.md): the commands, the rules the engine enforces, and links to the [architecture](docs/architecture.md), the [conventions](docs/conventions.md) and the [decision records](docs/adr/).
 
 ## License
 

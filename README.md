@@ -94,6 +94,7 @@ The explorer starts at the session's working directory.
 | `⌫` `←` `h` | parent folder (clears a filter first) | back to the list (`q` too) |
 | `/` | filter by name as you type (`⏎` or `Tab` to finish) | — |
 | `.` | show / hide dotfiles | — |
+| `m` | — | Markdown: rendered ↔ source |
 | `t` | only files Claude touched this session | — |
 | `r` | refresh | refresh the git marks |
 | `@` | insert `@path` into your prompt | insert `@path` into your prompt |
@@ -122,6 +123,12 @@ A label at the top right of the file box shows the mode: **VIEW MODE** (blue), *
 - **Exact saves:** a save writes the file in the shape it was read, keeping its line endings (LF or CRLF) and whether it ends with a newline.
 - **Read-only files:** editing is off for any file the preview had to alter to show it, so a save can never write the altered text. That means binaries, files over 1 MB or 5,000 lines, files with control characters, minified lines over 10,000 characters, or mixed line endings. The label then reads **READ ONLY**, and the reason shows on the line above the code.
 - **Changes made elsewhere:** if the file changed on disk after you opened it, for example because Claude edited it, `ctrl+s` warns first and only a second `ctrl+s` overwrites it. Without unsaved edits, the open file simply reloads when Claude changes it.
+
+### Markdown and pictures
+
+- **Markdown** files (`.md`, `.markdown`, `.mdx`) open rendered, with headings, lists, emphasis, code blocks, tables and links. Press `m` to switch to the source, which has the git gutter, and `m` again to go back. `e` edits the source like any other file, and leaving the editor shows it rendered again.
+- **PNG pictures** show as real pixels in terminals that can draw them (Ghostty, kitty), at their own proportions. Other terminals show the file name in their place. The size in pixels shows at the bottom right.
+- **JPEG, GIF, WebP and BMP** are converted to PNG on the fly if ImageMagick or ffmpeg is installed (`sudo apt install imagemagick`). Without either, the pane tells you what to install.
 
 ### Git changes
 

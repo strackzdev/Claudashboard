@@ -50,6 +50,11 @@ export type Preview = {
   status: string | null
   /** A second press confirms: leaving with unsaved edits, or saving over a newer file. */
   confirm: 'discard' | 'overwrite' | null
+  /** How the file shows: as code, as rendered markdown (source on `m`), or as a picture. */
+  kind?: 'text' | 'markdown' | 'image'
+  mdView?: 'rendered' | 'source'
+  /** A picture's PNG on disk (converted when the file is not a PNG) and its pixel size. */
+  image?: { file: string; width: number; height: number } | null
 }
 
 /** The git repository the folder on screen belongs to: drawn as the project bar above the files. */

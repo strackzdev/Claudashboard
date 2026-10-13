@@ -14,7 +14,6 @@ export type Row = {
   /** The file's git status letter, or a dot on a folder holding changes. */
   git: GitLetter | null
 }
-// test
 /** One gutter cell beside a line: a bar coloured by what changed it, a low bar where lines were deleted. */
 export type GutterMark = { glyph: string; tone: 'unsaved' | 'added' | 'modified' | 'deleted' | 'staged' }
 
@@ -63,6 +62,8 @@ export type ExplorerProps = {
   /** The git gutter for the lines in view (null: no data yet), and the file's change counts. */
   gutter: Array<GutterMark | null> | null
   changes: Changes | null
+  /** Rendered markdown for the lines in view, when a markdown file shows rendered. */
+  markdown: string | null
   /** The editor's window: display lines (tabs expanded), the cursor in it, the gutter and text widths. */
   edit: EditView | null
 }
@@ -125,12 +126,13 @@ function complete(raw: Partial<ExplorerProps> | null | undefined): ExplorerProps
     dirtyMark: typeof p.dirtyMark === 'string' ? p.dirtyMark : null,
     gutter: Array.isArray(p.gutter) ? p.gutter : null,
     changes: p.changes && typeof p.changes.added === 'number' ? p.changes : null,
+    markdown: typeof p.markdown === 'string' ? p.markdown : null,
     edit: p.edit && Array.isArray(p.edit.lines) ? p.edit : null,
   }
 }
 
 const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
-  const { Box, Text, Code } = surface.elements
+  const { Box, Text, Code, Markdown } = surface.elements
   const props = complete(rawProps)
   const ref = surface.state?.ref ?? { props }
   ref.props = props
@@ -311,6 +313,11 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
         </Text>
       ) : null}
       {editor}
+      {props.markdown !== null ? (
+        <Box flexDirection="column" width={W} height={Math.max(1, props.room - (props.note ? 1 : 0))} overflow="hidden">
+          <Markdown text={props.markdown || ' '} />
+        </Box>
+      ) : null}
       {props.code && props.code.source ? (
         <Box flexDirection="row" width={W}>
           <Box flexDirection="column" width={numW + 3} flexShrink={0}>

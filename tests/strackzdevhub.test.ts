@@ -3,6 +3,11 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import {
   DEFAULT_EXPLORER,
+  fitPicture,
+  fromBase64,
+  kindOf,
+  markdownWindow,
+  pngSize,
   clipMiddle,
   fitCrumbs,
   fitHeader,
@@ -516,4 +521,58 @@ test('the pane stays drawn while a turn runs (its live timer is a valid tree)', 
     expect(await ui.find({ text: /^SESSION$/ })).toBeDefined()
     await ui.unmount()
   }
+})
+
+// ---------------------------------------------------------------- markdown and pictures
+
+test('files show by kind: markdown, pictures, the rest as code', () => {
+  expect(kindOf('README.md')).toBe('markdown')
+  expect(kindOf('docs/a.MDX')).toBe('markdown')
+  expect(kindOf('shot.png')).toBe('image')
+  expect(kindOf('photo.JPEG')).toBe('image')
+  expect(kindOf('a.ts')).toBe('text')
+})
+
+test('a markdown window that starts inside a code fence reopens it', () => {
+  const lines = ['# Title', '```ts', 'const a = 1', 'const b = 2', '```', 'after']
+  expect(markdownWindow(lines, 0, 2)).toBe('# Title\n```ts')
+  expect(markdownWindow(lines, 3, 3)).toBe('```\nconst b = 2\n```\nafter')
+  expect(markdownWindow(lines, 5, 3)).toBe('after')
+})
+
+test('a PNG\'s size comes from its header; pictures keep their proportions', () => {
+  // The first 24 bytes of a 640×480 PNG.
+  const head = 'iVBORw0KGgoAAAANSUhEUgAAAoAAAAHg'
+  expect(pngSize(fromBase64(head))).toEqual({ width: 640, height: 480 })
+  expect(pngSize(fromBase64('aGVsbG8gd29ybGQgaGVsbG8gd29ybGQ='))).toBe(null)
+  // 640×480 in 76×20 cells: 4:3 with cells twice as tall as wide.
+  const fit = fitPicture(640, 480, 76, 20)
+  expect(fit.rows).toBeLessThanOrEqual(20)
+  expect(fit.columns).toBeLessThanOrEqual(76)
+  expect(Math.abs(fit.rows / fit.columns - 480 / 640 / 2)).toBeLessThan(0.05)
+  // A tiny picture is not blown up past ~8 pixels a cell.
+  expect(fitPicture(16, 16, 76, 20).columns).toBe(2)
+})
+
+test('a markdown file opens rendered; m shows its source with the gutter', async ($, on) => {
+  engine(on)
+  disk(on, { '/w/README.md': '# Hello\n\nSome **bold** text.\n' })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await ui.key({ key: 'return', in: 'explorer' })
+  const rendered = await explorerProps(ui)
+  expect(rendered.markdown).toBe('# Hello\n\nSome **bold** text.')
+  expect(rendered.code).toBe(null)
+  expect(JSON.stringify(rendered.hints)).toContain('"key":"m","label":"source"')
+  await ui.key({ key: 'm', in: 'explorer' })
+  const source = await explorerProps(ui)
+  expect(source.markdown).toBe(null)
+  expect((source.code as { source: string }).source).toContain('# Hello')
+  // Editing works on the source, and leaving the editor shows it rendered again.
+  await ui.key({ key: 'm', in: 'explorer' })
+  await ui.key({ key: 'e', in: 'explorer' })
+  expect((await explorerProps(ui)).fileMode).toBe('edit')
+  await ui.key({ key: 'e', ctrl: true, in: 'explorer' })
+  expect((await explorerProps(ui)).markdown).toContain('# Hello')
+  await ui.unmount()
 })

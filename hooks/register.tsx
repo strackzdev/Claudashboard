@@ -23,6 +23,11 @@ import {
   limitLabel,
   modeColorKey,
   emptyPreview,
+  fitPicture,
+  fromBase64,
+  kindOf,
+  markdownWindow,
+  pngSize,
   hasNoteRow,
   normalize,
   normalizeAgent,
@@ -297,8 +302,18 @@ async function loadPreview($: EngineInterface, path: string, keep: Partial<Previ
   const abs = absOf(ex.root, path)
   try {
     const st = await $.fs.stat(abs)
+    const kind = kindOf(path)
+    if (kind === 'image') {
+      const picture = await loadPicture($, abs, st.size, st.mtimeMs)
+      await update($, explorer, x => ({
+        ...normalize(DEFAULT_EXPLORER, x),
+        error: null,
+        preview: emptyPreview(path, { kind: 'image', lines: [], mtimeMs: st.mtimeMs, readOnly: 'picture', ...picture }),
+      }))
+      return
+    }
     const text = st.size > 1024 * 1024 ? '' : await $.fs.read(abs)
-    const fresh = previewOf(path, text, st.size, st.mtimeMs)
+    const fresh: Preview = { ...previewOf(path, text, st.size, st.mtimeMs), kind, mdView: keep.mdView ?? 'rendered' }
     const isEdit = keep.mode === 'edit' && fresh.readOnly === null
     const preview: Preview = {
       ...fresh,
@@ -317,6 +332,48 @@ async function loadPreview($: EngineInterface, path: string, keep: Partial<Previ
   } catch (err) {
     await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), error: `cannot read ${path}: ${String(err)}` }))
   }
+}
+
+/** The external tool that turns a JPEG, GIF, WebP or BMP into a PNG, found once: ImageMagick, then ffmpeg. */
+let converter: string[] | null | undefined
+
+async function findConverter($: EngineInterface): Promise<string[] | null> {
+  if (converter !== undefined) return converter
+  for (const argv of [['magick', '-version'], ['convert', '-version'], ['ffmpeg', '-version']]) {
+    const r = await $.process.run(argv, { timeoutMs: 3000 }).catch(() => null)
+    if (r && r.exitCode === 0 && (argv[0] !== 'convert' || r.stdout.includes('ImageMagick'))) {
+      converter = argv.slice(0, 1)
+      return converter
+    }
+  }
+  converter = null
+  return null
+}
+
+/**
+ * A picture ready for the terminal: a PNG as it is, anything else converted to a PNG under the
+ * system's temp folder (keyed by path and mtime, so an edited picture converts again).
+ */
+async function loadPicture($: EngineInterface, abs: string, size: number, mtimeMs: number): Promise<Pick<Preview, 'image' | 'note'>> {
+  const label = `${baseName(abs)} · ${fmtSize(size)}`
+  let png = abs
+  if (!/\.png$/i.test(abs)) {
+    const tool = await findConverter($)
+    if (!tool) return { image: null, note: `${label}: install ImageMagick or ffmpeg to preview this format (PNG shows as is)` }
+    const out = `/tmp/strackzdevhub-pictures/${abs.replace(/[^A-Za-z0-9._-]/g, '_')}.${Math.round(mtimeMs)}.png`
+    if (!(await $.fs.exists(out))) {
+      await $.process.run(['mkdir', '-p', '/tmp/strackzdevhub-pictures'], { timeoutMs: 3000 }).catch(() => null)
+      const argv = tool[0] === 'ffmpeg' ? ['ffmpeg', '-y', '-loglevel', 'error', '-i', abs, '-frames:v', '1', out] : [tool[0] ?? 'magick', `${abs}[0]`, out]
+      const r = await $.process.run(argv, { timeoutMs: 20000 }).catch(() => null)
+      if (!r || r.exitCode !== 0) return { image: null, note: `${label}: could not convert it to PNG` }
+    }
+    png = out
+  }
+  if (size > 4 * 1024 * 1024 && png === abs) return { image: null, note: `${label}: too large to preview` }
+  const read = (await $.fs.read(png, { as: 'bytes' })) as { base64: string }
+  const dims = pngSize(fromBase64(read.base64.slice(0, 64)))
+  if (!dims) return { image: null, note: `${label}: not a readable PNG` }
+  return { image: { file: png, ...dims }, note: null }
 }
 
 async function goUp($: EngineInterface) {
@@ -875,14 +932,21 @@ export const register: Register = (on, options) => {
             { key: 'ctrl+z', label: 'undo' },
             { key: 'click', label: 'place cursor' },
           ]
-        : [
-            ...(p.readOnly ? [] : [{ key: 'e', label: 'edit' }]),
-            { key: '↑↓', label: 'scroll' },
-            { key: 'PgUp/Dn', label: 'page' },
-            { key: 'g/G', label: 'top/end' },
-            { key: '@', label: 'mention' },
-            { key: '⌫', label: 'back' },
-          ]
+        : p.kind === 'image'
+          ? [
+              { key: '@', label: 'mention' },
+              { key: '⌫', label: 'back' },
+            ]
+          : [
+              ...(p.readOnly ? [] : [{ key: 'e', label: 'edit' }]),
+              ...(p.kind === 'markdown' ? [{ key: 'm', label: p.mdView === 'source' ? 'rendered' : 'source' }] : []),
+              { key: '↑↓', label: 'scroll' },
+              { key: 'PgUp/Dn', label: 'page' },
+              { key: 'g/G', label: 'top/end' },
+              { key: '@', label: 'mention' },
+              { key: '⌫', label: 'back' },
+            ]
+      const isRendered = !isEdit && p.kind === 'markdown' && p.mdView !== 'source'
       // The git gutter: every line's layer and change, for the lines in view.
       const base = bases.get(p.path)
       if (!base) void fetchBase($, ex.root, p.path).catch(() => undefined)
@@ -916,7 +980,8 @@ export const register: Register = (on, options) => {
         top: 0,
         room,
         width: inner,
-        code: !isEdit && end > p.top ? { source: p.lines.slice(p.top, end).map(l => clipEnd(l, MAX_DRAWN) || ' ').join('\n'), path: p.path, startLine: p.top + 1 } : null,
+        markdown: isRendered ? markdownWindow(p.lines, p.top, codeRoom) : null,
+        code: !isEdit && !isRendered && p.kind !== 'image' && end > p.top ? { source: p.lines.slice(p.top, end).map(l => clipEnd(l, MAX_DRAWN) || ' ').join('\n'), path: p.path, startLine: p.top + 1 } : null,
         note: noteText,
         empty: null,
         colors: C,
@@ -926,9 +991,13 @@ export const register: Register = (on, options) => {
         label: null,
         labelHint: null,
         dirtyMark: null,
-        gutter,
+        gutter: isRendered ? null : gutter,
         changes,
         edit,
+      }
+      // A picture's size sits bottom right, like a file's line count; the note line is kept for problems.
+      if (p.kind === 'image') {
+        props = { ...props, counter: p.image ? `${p.image.width}×${p.image.height} px` : '', fileMode: null, readOnly: null, note: ex.error ?? p.status ?? p.note }
       }
     } else {
       const cursor = Math.min(ex.cursor, Math.max(0, rows.length - 1))
@@ -976,6 +1045,7 @@ export const register: Register = (on, options) => {
         dirtyMark: null,
         gutter: null,
         changes: null,
+        markdown: null,
         edit: null,
         empty: rows.length > 0 ? null : ex.error ?? (rows.length === 0 ? (ex.onlyTouched ? 'No files touched yet this session.' : ex.filter ? 'Nothing matches the filter.' : 'Empty folder.') : null),
         colors: C,
@@ -985,6 +1055,17 @@ export const register: Register = (on, options) => {
     // Fit the header to the width: the label stays, the extras give way, the path folds.
     const header = fitHeader({ width: inner, crumbs: props.crumbs, filter: props.filter, mode: props.fileMode, isDirty: props.isDirty })
     props = { ...props, crumbs: header.crumbs, label: header.label, labelHint: header.hint, dirtyMark: header.dirty }
+
+    // A picture is the pane's to draw (the explorer client cannot): over the explorer's empty body.
+    const pic = ex.preview?.kind === 'image' ? ex.preview.image ?? null : null
+    const picRows = Math.max(1, room - (props.note ? 1 : 0))
+    const picBox = pic ? fitPicture(pic.width, pic.height, inner, picRows) : null
+    const picture =
+      pic && picBox && 'Image' in els ? (
+        <Box position="absolute" top={(repo ? 1 : 0) + 2 + (props.note ? 1 : 0)} left={Math.floor((inner - picBox.columns) / 2)}>
+          <els.Image key="picture" source={{ file: pic.file, format: 'png' }} columns={picBox.columns} rows={picBox.rows} alt={baseName(pic.file)} />
+        </Box>
+      ) : null
 
     const filesBox = (
       <Box flexDirection="column" borderStyle="round" borderColor={ex.preview?.mode === 'edit' ? C.warn : ex.preview ? C.accent : C.frame} paddingX={1} width={W}>
@@ -1019,6 +1100,7 @@ export const register: Register = (on, options) => {
         ) : (
           <Text color={C.dim}>The file explorer needs a surface that runs client modules (the terminal does).</Text>
         )}
+        {picture}
       </Box>
     )
 

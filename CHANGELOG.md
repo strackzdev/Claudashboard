@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.0 — 2026-10-13
+
+- **Markdown** files (`.md`, `.markdown`, `.mdx`) open rendered: headings, lists, emphasis, code blocks, tables, links. `m` switches to the source (with the git gutter) and back; `e` edits the source as any file, and leaving the editor shows it rendered again.
+- **Pictures**: PNGs show as real pixels in terminals that draw them (Ghostty, kitty), at their own proportions; elsewhere their name shows in their place. JPEG, GIF, WebP and BMP are converted to PNG when ImageMagick or ffmpeg is installed, else the pane says what to install. The size shows bottom right.
+
 ## 0.4.3 — 2026-10-13
 
 - Fix: the whole pane went blank while a request ran and came back when it ended. The live turn timer sat inside a text element, which the engine refuses (`Client inside an inline element`), so it drew its own empty pane. The timer now sits in a layout box; the pane stays up during requests with the timer ticking, and its values update when the request ends.

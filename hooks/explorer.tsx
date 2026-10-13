@@ -36,6 +36,13 @@ export type Palette = {
 
 export type Hint = { key: string; label: string }
 
+/** What the explorer posts back to the hooks module: every message carries the rows it shows. */
+export type UiMessage =
+  | { k: 'key'; key: string; ctrl: boolean; meta: boolean; room: number }
+  | { k: 'mode' | 'crumb'; room: number }
+  | { k: 'place'; row: number; vis: number; room: number }
+  | { k: 'click'; index: number; room: number }
+
 export type ExplorerProps = {
   mode: 'list' | 'preview'
   crumbs: string[]
@@ -139,24 +146,25 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
 
   if (surface.state === undefined) {
     surface.setState({ ref })
+    const post = (m: UiMessage) => surface.post(m)
     surface.onKey(k => {
-      surface.post({ k: 'key', key: k.key, ctrl: k.ctrl ?? false, meta: k.meta ?? false, room: ref.props.room })
+      post({ k: 'key', key: k.key, ctrl: k.ctrl ?? false, meta: k.meta ?? false, room: ref.props.room })
     })
     surface.onPointer(p => {
       if (p.type !== 'down' || p.button !== 'left') return
       const cur = ref.props
       // The mode label toggles view and edit; the rest of the breadcrumb goes back.
       const label = cur.label ?? ''
-      if (p.y === 0 && label && p.x >= Math.max(10, cur.width) - label.length) return surface.post({ k: 'mode', room: cur.room })
-      if (p.y === 0) return surface.post({ k: 'crumb', room: cur.room })
+      if (p.y === 0 && label && p.x >= Math.max(10, cur.width) - label.length) return post({ k: 'mode', room: cur.room })
+      if (p.y === 0) return post({ k: 'crumb', room: cur.room })
       if (cur.edit) {
         const row = p.y - HEAD - (cur.note ? 1 : 0)
         if (row < 0 || row >= cur.edit.lines.length) return
         const vis = p.x - cur.edit.gutterW - 4 + (row === cur.edit.cursorRow ? cur.edit.hoff : 0)
-        return surface.post({ k: 'place', row, vis, room: cur.room })
+        return post({ k: 'place', row, vis, room: cur.room })
       }
       const i = p.y - HEAD
-      if (cur.mode === 'list' && i >= 0 && i < cur.rows.length) surface.post({ k: 'click', index: cur.top + i, room: cur.room })
+      if (cur.mode === 'list' && i >= 0 && i < cur.rows.length) post({ k: 'click', index: cur.top + i, room: cur.room })
     })
   }
 

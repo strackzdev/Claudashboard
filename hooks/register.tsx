@@ -3,12 +3,14 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Agent, Entry, Explorer, Preview, RepoInfo, Vitals } from '../types'
+import type { Key } from './core'
 import {
   DEFAULT_EXPLORER,
   DEFAULT_VITALS,
   EFFORT_LEVEL,
   fitHeader,
   MAX_DRAWN,
+  MAX_PREVIEW_BYTES,
   baseName,
   clipEnd,
   describeTool,
@@ -45,7 +47,7 @@ import {
 import { colFromVisual, displayOf, reduceEdit, textOf, visualCol } from './editor'
 import { countStatus, lineMarks, parseBranch, parsePorcelain, splitText, statusLetter } from './gitdiff'
 import type { LineMark } from './gitdiff'
-import type { ExplorerProps, GutterMark, Hint, Palette } from './explorer'
+import type { ExplorerProps, GutterMark, Hint, Palette, UiMessage } from './explorer'
 
 const PANE = 'strackzdevhub'
 const TITLE = 'STRACKZDEVHUB'
@@ -101,6 +103,27 @@ const getExplorer = async ($: EngineInterface): Promise<Explorer> => {
   // A preview stored by an older version lacks the editor's fields.
   return ex.preview ? { ...ex, preview: emptyPreview(ex.preview.path, ex.preview) } : ex
 }
+const updateExplorer = ($: EngineInterface, fn: (ex: Explorer) => Explorer) => update($, explorer, x => fn(normalize(DEFAULT_EXPLORER, x)))
+const updateVitals = ($: EngineInterface, fn: (v: Vitals) => Vitals) => update($, vitals, x => fn(normalize(DEFAULT_VITALS, x)))
+
+type Usage = {
+  context?: { percent?: number | null; tokens?: number | null; window?: number | null } | null
+  cost?: { usd?: number | null } | null
+  rateLimits?: Array<{ kind: string; percentUsed: number }> | null
+}
+/** The vitals a usage report (from `session.usage()` or `session.measure`) sets. */
+const usageToVitals = (u: Usage): Partial<Vitals> => ({
+  pct: u.context?.percent ?? null,
+  tokens: u.context?.tokens ?? null,
+  window: u.context?.window ?? null,
+  costUsd: u.cost?.usd ?? null,
+  limits: (u.rateLimits ?? []).map(r => ({ kind: r.kind, pct: r.percentUsed })),
+})
+
+const sameLines = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((l, i) => l === b[i])
+/** Whether the file on disk is newer than the copy the preview read. */
+const changedOnDisk = (st: { mtimeMs: number } | null, p: Preview) => Boolean(st && p.mtimeMs && Math.abs(st.mtimeMs - p.mtimeMs) > 1)
+const toKey = (d: { key: string; ctrl?: boolean; meta?: boolean }): Key => ({ key: d.key, ...(d.ctrl ? { ctrl: true } : {}), ...(d.meta ? { meta: true } : {}) })
 
 /** Undo steps per file, newest last, and the text as last read or saved; the module's own, so a reload drops them. */
 const history = new Map<string, Array<Pick<Preview, 'lines' | 'row' | 'col'>>>()
@@ -147,8 +170,7 @@ async function fetchBase($: EngineInterface, root: string, path: string) {
       }
     }
     const old = bases.get(path)
-    const same = (a: string[], b: string[]) => a.length === b.length && a.every((l, i) => l === b[i])
-    if (old && old.repo === base.repo && same(old.head, base.head) && same(old.index, base.index)) return
+    if (old && old.repo === base.repo && sameLines(old.head, base.head) && sameLines(old.index, base.index)) return
     bases.set(path, base)
     await update($, gitTick, n => (n ?? 0) + 1)
   } finally {
@@ -187,10 +209,7 @@ async function refreshGit($: EngineInterface) {
   if (ex.preview) await fetchBase($, ex.root, ex.preview.path)
   if (ex.onlyTouched) return
   const { entries, repo } = await gitStatusOf($, ex.root, ex.dir, ex.entries)
-  await update($, explorer, x => {
-    const cur = normalize(DEFAULT_EXPLORER, x)
-    return cur.dir === ex.dir ? { ...cur, entries, repo } : cur
-  })
+  await updateExplorer($, cur => (cur.dir === ex.dir ? { ...cur, entries, repo } : cur))
 }
 
 /** Whether two listings show the same thing: names, sizes, times and git letters. */
@@ -216,12 +235,7 @@ async function poll($: EngineInterface) {
     if (ex.preview) {
       const p = ex.preview
       const st = await $.fs.stat(absOf(ex.root, p.path)).catch(() => null)
-      if (st && p.mtimeMs && Math.abs(st.mtimeMs - p.mtimeMs) > 1) {
-        if (!p.dirty) await loadPreview($, p.path, { mode: p.mode, top: p.top, row: p.row, col: p.col, status: 'reloaded: changed on disk' })
-        else if (p.confirm !== 'overwrite' && !p.status?.includes('changed on disk')) {
-          await setPreview($, x => ({ ...x, status: 'the file changed on disk: saving will ask before overwriting' }))
-        }
-      }
+      if (changedOnDisk(st, p)) await reloadChanged($, p, false)
       await fetchBase($, ex.root, p.path)
     }
     if (ex.onlyTouched) return
@@ -230,8 +244,7 @@ async function poll($: EngineInterface) {
     const { entries, repo } = await gitStatusOf($, ex.root, ex.dir, listed)
     const sameRepo = JSON.stringify(repo ?? null) === JSON.stringify(ex.repo ?? null)
     if (sameRepo && sameListing(entries, ex.entries)) return
-    await update($, explorer, x => {
-      const cur = normalize(DEFAULT_EXPLORER, x)
+    await updateExplorer($, cur => {
       if (cur.dir !== ex.dir) return cur
       // Keep the cursor on the same entry when files come and go.
       // The cursor indexes the visible rows, not every entry.
@@ -247,10 +260,7 @@ async function poll($: EngineInterface) {
 }
 
 const setPreview = ($: EngineInterface, fn: (p: Preview) => Preview) =>
-  update($, explorer, x => {
-    const ex = normalize(DEFAULT_EXPLORER, x)
-    return ex.preview ? { ...ex, preview: fn(emptyPreview(ex.preview.path, ex.preview)) } : ex
-  })
+  updateExplorer($, ex => (ex.preview ? { ...ex, preview: fn(emptyPreview(ex.preview.path, ex.preview)) } : ex))
 const getTouched = async ($: EngineInterface): Promise<Record<string, number>> => (await read($, touched)) ?? {}
 const getAgents = async ($: EngineInterface): Promise<Agent[]> => {
   const list = await read($, agents)
@@ -286,13 +296,13 @@ async function loadDir($: EngineInterface, dir: string, select?: string) {
   try {
     const listed = ex.onlyTouched ? touchedEntries(await getTouched($)) : await listDir($, ex.root, dir)
     const { entries, repo } = await gitStatusOf($, ex.root, dir, listed).catch(() => ({ entries: listed, repo: null }))
-    await update($, explorer, x => {
-      const next: Explorer = { ...normalize(DEFAULT_EXPLORER, x), dir, entries, repo, preview: null, error: null, cursor: 0 }
+    await updateExplorer($, x => {
+      const next: Explorer = { ...x, dir, entries, repo, preview: null, error: null, cursor: 0 }
       const at = select ? visibleEntries(next).findIndex(e => e.path === select) : -1
       return { ...next, cursor: Math.max(0, at) }
     })
   } catch (err) {
-    await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), error: `cannot open ${dir || '.'}: ${String(err)}` }))
+    await updateExplorer($, x => ({ ...x, error: `cannot open ${dir || '.'}: ${String(err)}` }))
   }
 }
 
@@ -307,14 +317,14 @@ async function loadPreview($: EngineInterface, path: string, keep: Partial<Previ
     const kind = kindOf(path)
     if (kind === 'image') {
       const picture = await loadPicture($, abs, st.size, st.mtimeMs)
-      await update($, explorer, x => ({
-        ...normalize(DEFAULT_EXPLORER, x),
+      await updateExplorer($, x => ({
+        ...x,
         error: null,
         preview: emptyPreview(path, { kind: 'image', lines: [], mtimeMs: st.mtimeMs, readOnly: 'picture', ...picture }),
       }))
       return
     }
-    const text = st.size > 1024 * 1024 ? '' : await $.fs.read(abs)
+    const text = st.size > MAX_PREVIEW_BYTES ? '' : await $.fs.read(abs)
     const fresh: Preview = { ...previewOf(path, text, st.size, st.mtimeMs), kind, mdView: keep.mdView ?? 'rendered' }
     const isEdit = keep.mode === 'edit' && fresh.readOnly === null
     const preview: Preview = {
@@ -330,9 +340,9 @@ async function loadPreview($: EngineInterface, path: string, keep: Partial<Previ
     if (!opened.has(path)) opened.set(path, fresh.lines)
     bases.delete(path)
     void fetchBase($, ex.root, path).catch(() => undefined)
-    await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), preview, error: null }))
+    await updateExplorer($, x => ({ ...x, preview, error: null }))
   } catch (err) {
-    await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), error: `cannot read ${path}: ${String(err)}` }))
+    await updateExplorer($, x => ({ ...x, error: `cannot read ${path}: ${String(err)}` }))
   }
 }
 
@@ -378,16 +388,27 @@ async function loadPicture($: EngineInterface, abs: string, size: number, mtimeM
   return { image: { file: png, ...dims }, note: null }
 }
 
+/** The open file changed on disk: show the new text, or warn once when the person has unsaved edits. */
+async function reloadChanged($: EngineInterface, p: Preview, isByClaude: boolean) {
+  if (!p.dirty) {
+    const status = isByClaude ? 'reloaded: Claude changed this file' : 'reloaded: changed on disk'
+    return loadPreview($, p.path, { mode: p.mode, top: p.top, row: p.row, col: p.col, status })
+  }
+  if (p.confirm === 'overwrite' || p.status?.includes('changed on disk')) return
+  const who = isByClaude ? 'Claude changed this file' : 'the file changed'
+  await setPreview($, x => ({ ...x, status: `${who} on disk: saving will ask before overwriting` }))
+}
+
 async function goUp($: EngineInterface) {
   const ex = await getExplorer($)
   if (ex.preview?.mode === 'edit') return leaveEdit($)
   if (ex.preview) {
-    await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), preview: null }))
+    await updateExplorer($, x => ({ ...x, preview: null }))
     void refreshGit($).catch(() => undefined)
     return
   }
   if (ex.onlyTouched) {
-    await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), onlyTouched: false }))
+    await updateExplorer($, x => ({ ...x, onlyTouched: false }))
     return loadDir($, ex.dir)
   }
   if (!ex.dir) return
@@ -431,7 +452,7 @@ async function saveFile($: EngineInterface) {
   try {
     const st = await $.fs.stat(abs).catch(() => null)
     // Someone (Claude, another editor) changed the file since it was read: a second ctrl+s overwrites.
-    if (st && p.mtimeMs && Math.abs(st.mtimeMs - p.mtimeMs) > 1 && p.confirm !== 'overwrite') {
+    if (changedOnDisk(st, p) && p.confirm !== 'overwrite') {
       return setPreview($, x => ({ ...x, status: 'the file changed on disk: ctrl+s again overwrites it, ctrl+e twice reloads it', confirm: 'overwrite' }))
     }
     await $.fs.write(abs, textOf(p))
@@ -451,7 +472,7 @@ async function undoEdit($: EngineInterface, room: number) {
   const last = steps.pop()
   if (!last) return setPreview($, x => ({ ...x, status: 'nothing to undo' }))
   const base = saved.get(p.path)
-  const isSaved = base !== undefined && base.length === last.lines.length && base.every((l, i) => l === last.lines[i])
+  const isSaved = base !== undefined && sameLines(base, last.lines)
   await setPreview($, x => {
     const rows = Math.max(1, hasNoteRow(x) ? room - 1 : room)
     const top = last.row < x.top || last.row >= x.top + rows ? Math.max(0, last.row - Math.floor(rows / 2)) : x.top
@@ -460,7 +481,7 @@ async function undoEdit($: EngineInterface, room: number) {
 }
 
 /** One key, a click on the mode label, or a click in the text, while editing. */
-async function editMessage($: EngineInterface, p: Preview, d: { k?: string; key?: string; ctrl?: boolean; meta?: boolean; row?: number; vis?: number }, room: number) {
+async function editMessage($: EngineInterface, p: Preview, d: UiMessage, room: number) {
   if (d.k === 'mode' || d.k === 'crumb') return leaveEdit($)
   if (d.k === 'place' && typeof d.row === 'number' && typeof d.vis === 'number') {
     const row = Math.min(p.top + d.row, Math.max(0, p.lines.length - 1))
@@ -468,7 +489,7 @@ async function editMessage($: EngineInterface, p: Preview, d: { k?: string; key?
     return setPreview($, x => ({ ...x, row, col, confirm: null }))
   }
   if (d.k !== 'key' || typeof d.key !== 'string') return
-  const r = reduceEdit(p, { key: d.key, ...(d.ctrl ? { ctrl: true } : {}), ...(d.meta ? { meta: true } : {}) }, room)
+  const r = reduceEdit(p, toKey(d), room)
   if (r.effect === 'save') return saveFile($)
   if (r.effect === 'exit') return leaveEdit($)
   if (r.effect === 'undo') return undoEdit($, room)
@@ -491,7 +512,7 @@ async function initExplorer($: EngineInterface, showHidden: boolean) {
   const ex = await getExplorer($)
   // Keep where the person was across reloads; start over when the session moved to another folder.
   if (ex.root === root) {
-    await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), showHidden }))
+    await updateExplorer($, x => ({ ...x, showHidden }))
     return loadDir($, ex.dir)
   }
   await update($, explorer, () => ({ ...DEFAULT_EXPLORER, root, showHidden }))
@@ -501,14 +522,7 @@ async function initExplorer($: EngineInterface, showHidden: boolean) {
 async function refreshUsage($: EngineInterface) {
   const u = await $.session.usage().catch(() => null)
   if (!u) return
-  await update($, vitals, x => ({
-    ...normalize(DEFAULT_VITALS, x),
-    pct: u.context?.percent ?? null,
-    tokens: u.context?.tokens ?? null,
-    window: u.context?.window ?? null,
-    costUsd: u.cost?.usd ?? null,
-    limits: (u.rateLimits ?? []).map(r => ({ kind: r.kind, pct: r.percentUsed })),
-  }))
+  await updateVitals($, x => ({ ...x, ...usageToVitals(u) }))
 }
 
 /** Records a file Claude edited, and shows it in the folder on screen. */
@@ -520,11 +534,7 @@ async function noteEdit($: EngineInterface, e: unknown) {
   const path = relTo(ex.root, abs)
   await update($, touched, t => ({ ...(t ?? {}), [path]: ((t ?? {})[path] ?? 0) + 1 }))
   // The file open in the preview changed under it: show the new text, unless the person has unsaved edits.
-  if (ex.preview && ex.preview.path === path) {
-    const p = emptyPreview(ex.preview.path, ex.preview)
-    if (p.dirty) await setPreview($, x => ({ ...x, status: 'Claude changed this file on disk: saving will ask before overwriting' }))
-    else await loadPreview($, p.path, { mode: p.mode, top: p.top, row: p.row, col: p.col, status: 'reloaded: Claude changed this file' })
-  }
+  if (ex.preview && ex.preview.path === path) await reloadChanged($, ex.preview, true)
   // A new file in the folder on screen shows without a manual refresh.
   if (!ex.preview && !ex.onlyTouched && parentOf(path) === ex.dir && !ex.entries.some(x => x.path === path)) await loadDir($, ex.dir)
   if (ex.onlyTouched) await loadDir($, ex.dir)
@@ -532,7 +542,7 @@ async function noteEdit($: EngineInterface, e: unknown) {
 
 async function refreshModel($: EngineInterface) {
   const model = await $.session.model().catch(() => '')
-  if (model) await update($, vitals, x => ({ ...normalize(DEFAULT_VITALS, x), model }))
+  if (model) await updateVitals($, x => ({ ...x, model }))
 }
 
 /** Adds a card for a spawned subagent. */
@@ -618,7 +628,7 @@ export const register: Register = (on, options) => {
       const root = ex.root.replace(/\/+$/, '')
       const rel = target === root ? '' : target.startsWith('/') ? relTo(root, target) : target
       if (rel.startsWith('/') || rel.split('/').includes('..')) return { text: `${target} is outside ${ex.root}.` }
-      await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), onlyTouched: false, filter: '' }))
+      await updateExplorer($, x => ({ ...x, onlyTouched: false, filter: '' }))
       await loadDir($, rel)
       const after = await getExplorer($)
       if (after.error) return { text: `STRACKZDEVHUB: ${after.error}` }
@@ -633,7 +643,7 @@ export const register: Register = (on, options) => {
 
   on('classic.UserPromptSubmit', async ($, e, next) => {
     if (e.permission_mode) {
-      await update($, vitals, x => ({ ...normalize(DEFAULT_VITALS, x), mode: String(e.permission_mode) })).catch(() => undefined)
+      await updateVitals($, x => ({ ...x, mode: String(e.permission_mode) })).catch(() => undefined)
     }
     return next(e)
   })
@@ -641,16 +651,13 @@ export const register: Register = (on, options) => {
   // turn.start is the main loop's alone: a subagent's turn never raises it.
   on('turn.start', async ($, e, next) => {
     const [now, u] = await Promise.all([$.clock.now(), $.session.usage().catch(() => null)])
-    await update($, vitals, x => ({ ...normalize(DEFAULT_VITALS, x), turnStartedAt: now, turnCostStart: u?.cost?.usd ?? null }))
+    await updateVitals($, x => ({ ...x, turnStartedAt: now, turnCostStart: u?.cost?.usd ?? null }))
     return next(e)
   })
 
   on('turn.step', async function* ($, e, next) {
     if (!e.agentId) {
-      await update($, vitals, x => {
-        const v = normalize(DEFAULT_VITALS, x)
-        return { ...v, model: e.model, effort: e.effort === undefined ? v.effort : String(e.effort) }
-      })
+      await updateVitals($, v => ({ ...v, model: e.model, effort: e.effort === undefined ? v.effort : String(e.effort) }))
       return yield* next(e)
     }
     const result = yield* next(e)
@@ -677,8 +684,7 @@ export const register: Register = (on, options) => {
     }
     void refreshGit($).catch(() => undefined)
     const [now, u] = await Promise.all([$.clock.now(), $.session.usage().catch(() => null)])
-    await update($, vitals, x => {
-      const v = normalize(DEFAULT_VITALS, x)
+    await updateVitals($, v => {
       const cost = u?.cost?.usd ?? null
       return {
         ...v,
@@ -692,24 +698,14 @@ export const register: Register = (on, options) => {
   })
 
   on('session.measure', async ($, e, next) => {
-    await update($, vitals, x => ({
-      ...normalize(DEFAULT_VITALS, x),
-      pct: e.context?.percent ?? null,
-      tokens: e.context?.tokens ?? null,
-      window: e.context?.window ?? null,
-      costUsd: e.cost?.usd ?? null,
-      limits: (e.rateLimits ?? []).map(r => ({ kind: r.kind, pct: r.percentUsed })),
-    }))
+    await updateVitals($, x => ({ ...x, ...usageToVitals(e) }))
     return next(e)
   })
 
   on('session.compact', async ($, e, next) => {
     const done = await next(e)
     if (!e.agentId && e.trigger !== 'precompute') {
-      await update($, vitals, x => {
-        const v = normalize(DEFAULT_VITALS, x)
-        return { ...v, compactions: v.compactions + 1 }
-      }).catch(() => undefined)
+      await updateVitals($, v => ({ ...v, compactions: v.compactions + 1 })).catch(() => undefined)
     }
     return done
   })
@@ -731,7 +727,8 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.message', async ($, e) => {
-    const d = e.data as { k?: string; key?: string; ctrl?: boolean; meta?: boolean; index?: number; room?: number; row?: number; vis?: number }
+    // The explorer client sends these; the checks below still guard each field.
+    const d = e.data as UiMessage
     const room = Math.max(3, Number(d.room) || 10)
     const ex = await getExplorer($)
     if (ex.preview?.mode === 'edit') {
@@ -745,18 +742,18 @@ export const register: Register = (on, options) => {
     if (d.k === 'click' && typeof d.index === 'number') {
       const entry = visibleEntries(ex)[d.index]
       if (entry) {
-        await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), cursor: d.index ?? 0 }))
+        await updateExplorer($, x => ({ ...x, cursor: d.index }))
         await openEntry($, entry)
       }
       return {}
     }
     if (d.k === 'crumb') {
-      if (ex.isFiltering || ex.filter) await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), isFiltering: false, filter: '', cursor: 0 }))
+      if (ex.isFiltering || ex.filter) await updateExplorer($, x => ({ ...x, isFiltering: false, filter: '', cursor: 0 }))
       await goUp($)
       return {}
     }
     if (d.k !== 'key' || typeof d.key !== 'string') return {}
-    const { ex: nextEx, effect } = reduceKey(ex, { key: d.key, ...(d.ctrl ? { ctrl: true } : {}), ...(d.meta ? { meta: true } : {}) }, room)
+    const { ex: nextEx, effect } = reduceKey(ex, toKey(d), room)
     if (nextEx !== ex) await update($, explorer, () => nextEx)
     if (effect?.kind === 'open') await openEntry($, effect.entry, effect.edit === true)
     else if (effect?.kind === 'edit') await enterEdit($)

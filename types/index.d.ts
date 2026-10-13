@@ -58,7 +58,7 @@ export type Agent = {
 
 declare module 'claude-code' {
   interface PluginState {
-    jopinhub: {
+    strackzdevhub: {
       vitals: Vitals
       explorer: Explorer
       touched: Record<string, number>

@@ -1,7 +1,7 @@
 {
-  "name": "jopinhub",
+  "name": "strackzdevhub",
   "version": "0.2.0",
-  "description": "JOPINHUB: a clean hub pane for Claude Code. Session vitals (model, effort, context, cost, rate limits), live subagent cards, and a mouse + keyboard file explorer with in-pane preview",
+  "description": "STRACKZDEVHUB: a clean hub pane for Claude Code. Session vitals (model, effort, context, cost, rate limits), live subagent cards, and a mouse + keyboard file explorer with in-pane preview",
   "author": {
     "name": "José Pinto"
   },
@@ -34,7 +34,7 @@
     },
     "openOnStart": {
       "title": "Open on start",
-      "description": "Open the JOPINHUB pane when a session starts",
+      "description": "Open the STRACKZDEVHUB pane when a session starts",
       "type": "boolean",
       "default": true
     }

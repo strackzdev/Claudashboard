@@ -1,4 +1,4 @@
-// JOPINHUB: session vitals, running subagents, and a file explorer with an in-pane preview.
+// STRACKZDEVHUB: session vitals, running subagents, and a file explorer with an in-pane preview.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
@@ -34,16 +34,16 @@ import {
 } from './core'
 import type { ExplorerProps, Hint, Palette } from './explorer'
 
-const PANE = 'jopinhub'
-const TITLE = 'JOPINHUB'
+const PANE = 'strackzdevhub'
+const TITLE = 'STRACKZDEVHUB'
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 /** Agents drawn before the rest fold into `+n more`. */
 const MAX_AGENTS = 4
 
-const vitals = atom({ plugin: 'jopinhub', key: 'vitals' } as const, DEFAULT_VITALS)
-const explorer = atom({ plugin: 'jopinhub', key: 'explorer' } as const, DEFAULT_EXPLORER)
-const touched = atom({ plugin: 'jopinhub', key: 'touched' } as const, {})
-const agents = atom({ plugin: 'jopinhub', key: 'agents' } as const, [] as Agent[])
+const vitals = atom({ plugin: 'strackzdevhub', key: 'vitals' } as const, DEFAULT_VITALS)
+const explorer = atom({ plugin: 'strackzdevhub', key: 'explorer' } as const, DEFAULT_EXPLORER)
+const touched = atom({ plugin: 'strackzdevhub', key: 'touched' } as const, {})
+const agents = atom({ plugin: 'strackzdevhub', key: 'agents' } as const, [] as Agent[])
 
 type Colors = Palette & { ok: string; bad: string; info: string; purple: string; frame: string; pillFg: string }
 
@@ -203,8 +203,8 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
-      name: 'jopin',
-      description: 'JOPINHUB: open or close the hub, jump the explorer to a folder, or reset it',
+      name: 'strackzdevhub',
+      description: 'STRACKZDEVHUB: open or close the hub, jump the explorer to a folder, or reset it',
       argumentHint: '[close|cd <path>|reset]',
     })
     await Promise.all([refreshUsage($), refreshModel($)])
@@ -218,19 +218,19 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('command.run', { command: 'jopin' }, async ($, e) => {
+  on('command.run', { command: 'strackzdevhub' }, async ($, e) => {
     const args = e.args.trim()
     const [verb = ''] = args.split(/\s+/)
     if (verb === 'close') {
       await $.ui.close({ id: PANE })
-      return { text: 'JOPINHUB closed.' }
+      return { text: 'STRACKZDEVHUB closed.' }
     }
     if (verb === 'reset') {
       await update($, touched, () => ({}))
       await update($, agents, () => [])
       await update($, explorer, () => DEFAULT_EXPLORER)
       await initExplorer($, showHiddenDefault)
-      return { text: 'JOPINHUB reset: explorer back at the root, touched files and agents cleared.' }
+      return { text: 'STRACKZDEVHUB reset: explorer back at the root, touched files and agents cleared.' }
     }
     if (verb === 'cd') {
       const ex = await getExplorer($)
@@ -240,12 +240,12 @@ export const register: Register = (on, options) => {
       await update($, explorer, x => ({ ...normalize(DEFAULT_EXPLORER, x), onlyTouched: false, filter: '' }))
       await loadDir($, rel)
       await openPane($)
-      return { text: `JOPINHUB explorer at ./${rel}` }
+      return { text: `STRACKZDEVHUB explorer at ./${rel}` }
     }
     await refreshModel($)
     const opened = await openPane($)
-    if (!opened.isPlaced) return { text: `JOPINHUB is not shown yet: ${opened.reason ?? 'no room'}` }
-    return { text: 'JOPINHUB open. Click the file list to give it the keyboard; Esc hands it back.' }
+    if (!opened.isPlaced) return { text: `STRACKZDEVHUB is not shown yet: ${opened.reason ?? 'no room'}` }
+    return { text: 'STRACKZDEVHUB open. Click the file list to give it the keyboard; Esc hands it back.' }
   })
 
   on('classic.UserPromptSubmit', async ($, e, next) => {

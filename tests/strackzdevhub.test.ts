@@ -101,11 +101,11 @@ const engine = (on: On) => {
 }
 
 const pane = (bodyColumns: number) => ({
-  plugin: 'jopinhub',
+  plugin: 'strackzdevhub',
   component: 'Pane' as const,
-  requestId: 'jopinhub',
+  requestId: 'strackzdevhub',
   props: {
-    title: 'JOPINHUB',
+    title: 'STRACKZDEVHUB',
     isFocused: true,
     bodyColumns,
     placement: 'dock' as const,

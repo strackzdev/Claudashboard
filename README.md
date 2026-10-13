@@ -1,4 +1,4 @@
-# JOPINHUB
+# STRACKZDEVHUB
 
 **A clean hub pane for Claude Code.** It shows the session's vitals, the subagents that are working right now, and a file explorer you drive with the mouse or the keyboard, with a syntax-highlighted preview inside the pane.
 
@@ -33,9 +33,9 @@ You need Claude Code **2.1.287 or later**, which is when mods arrived.
 Inside Claude Code:
 
 ```
-/plugin marketplace add OWNER/jopinhub
-/plugin install jopinhub@jopinhub
-/jopin
+/plugin marketplace add OWNER/strackzdevhub
+/plugin install strackzdevhub@strackzdevhub
+/strackzdevhub
 ```
 
 Replace `OWNER` with the GitHub account that hosts this repository.
@@ -44,15 +44,15 @@ Replace `OWNER` with the GitHub account that hosts this repository.
 <summary>From a local clone</summary>
 
 ```sh
-git clone https://github.com/OWNER/jopinhub
-claude plugin marketplace add ./jopinhub
-claude plugin install jopinhub@jopinhub
+git clone https://github.com/OWNER/strackzdevhub
+claude plugin marketplace add ./strackzdevhub
+claude plugin install strackzdevhub@strackzdevhub
 ```
 
 To try it for a single session without installing it:
 
 ```sh
-claude --plugin-dir ./jopinhub
+claude --plugin-dir ./strackzdevhub
 ```
 
 </details>
@@ -106,14 +106,14 @@ Files Claude edited or created this session are marked **✎** in yellow, and ne
 
 | Command | Does |
 | --- | --- |
-| `/jopin` | open the hub |
-| `/jopin close` | close it |
-| `/jopin cd <path>` | jump the explorer to a folder, relative to the working directory or absolute inside it |
-| `/jopin reset` | clear the touched files and agents, and move the explorer back to the root |
+| `/strackzdevhub` | open the hub |
+| `/strackzdevhub close` | close it |
+| `/strackzdevhub cd <path>` | jump the explorer to a folder, relative to the working directory or absolute inside it |
+| `/strackzdevhub reset` | clear the touched files and agents, and move the explorer back to the root |
 
 ## Configure
 
-Open `/config` and find **jopinhub**, or set the values under `pluginConfigs.jopinhub` in your settings.
+Open `/config` and find **strackzdevhub**, or set the values under `pluginConfigs.strackzdevhub` in your settings.
 
 | Option | Default | |
 | --- | --- | --- |
@@ -124,7 +124,7 @@ Open `/config` and find **jopinhub**, or set the values under `pluginConfigs.jop
 ## Layout tips
 
 - In **fullscreen** at 110 columns or wider, the pane docks beside the transcript. Otherwise it sits inline above the prompt, about 30 rows tall.
-- When it gets cramped, close other panes. `/jopin close` hides JOPINHUB until you run `/jopin` again.
+- When it gets cramped, close other panes. `/strackzdevhub close` hides STRACKZDEVHUB until you run `/strackzdevhub` again.
 
 ## Develop
 

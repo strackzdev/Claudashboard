@@ -1,14 +1,14 @@
 {
-  "name": "jopinhub",
-  "description": "JOPINHUB, a clean hub pane for Claude Code",
+  "name": "strackzdevhub",
+  "description": "STRACKZDEVHUB, a clean hub pane for Claude Code",
   "owner": {
     "name": "José Pinto"
   },
   "plugins": [
     {
-      "name": "jopinhub",
+      "name": "strackzdevhub",
       "source": "./",
-      "description": "JOPINHUB: a clean hub pane for Claude Code. Session vitals (model, effort, context, cost, rate limits), live subagent cards, and a mouse + keyboard file explorer with in-pane preview"
+      "description": "STRACKZDEVHUB: a clean hub pane for Claude Code. Session vitals (model, effort, context, cost, rate limits), live subagent cards, and a mouse + keyboard file explorer with in-pane preview"
     }
   ]
 }

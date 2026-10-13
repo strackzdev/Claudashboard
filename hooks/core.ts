@@ -1,4 +1,4 @@
-// Pure logic for JOPINHUB: formatting, paths, and the explorer's key reducer. No `$` here, so it is testable.
+// Pure logic for STRACKZDEVHUB: formatting, paths, and the explorer's key reducer. No `$` here, so it is testable.
 import type { Entry, Explorer, Preview, Vitals } from '../types'
 
 export const DEFAULT_VITALS: Vitals = {

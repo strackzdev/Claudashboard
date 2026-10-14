@@ -95,7 +95,7 @@ The explorer starts at the session's working directory.
 | `/` | filter by name as you type (`⏎` or `Tab` to finish) | — |
 | `.` | show / hide dotfiles | — |
 | `m` | — | Markdown: rendered ↔ source |
-| `t` | only files Claude touched this session | — |
+| `t` | only touched files: in a git repository, what `git status` reports changed; elsewhere, what Claude edited this session | — |
 | `r` | refresh | refresh the git marks |
 | `@` | insert `@path` into your prompt | insert `@path` into your prompt |
 | `e` | open the file straight into edit mode | switch to edit mode |
@@ -150,7 +150,7 @@ While the pane is open, it refreshes every 3 seconds: files you edit, create or 
 
 Outside a git repository, the gutter compares the file with how it was when you first opened it, so lines you changed and saved still show (`since opened`). The marks refresh after each save, when you leave the file, after each Claude turn, and when you press `r` in the preview.
 
-Files Claude edited or created this session are marked **✎** in yellow, and new files appear automatically. The preview won't show binary files or files over 1 MB, and it shows at most the first 5,000 lines.
+Touched files are marked **✎**. In a git repository that means what `git status` reports changed right now, whoever changed it: a file you revert or commit is no longer touched. Outside git, it means the files Claude edited or created this session. New files appear automatically. The preview won't show binary files or files over 1 MB, and it shows at most the first 5,000 lines.
 
 ## Commands
 
@@ -160,7 +160,7 @@ Files Claude edited or created this session are marked **✎** in yellow, and ne
 | `/strackzdevhub close` | close it |
 | `/strackzdevhub save` | save the file being edited |
 | `/strackzdevhub cd <path>` | jump the explorer to a folder: relative to the working directory, or an absolute path inside it (`..` is refused) |
-| `/strackzdevhub reset` | clear the touched files and agents, and move the explorer back to the root |
+| `/strackzdevhub reset` | clear Claude's touched files (outside git) and the agents, and move the explorer back to the root |
 
 ## Configure
 

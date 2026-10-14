@@ -1,5 +1,5 @@
 // Pure logic for STRACKZDEVHUB: the props the explorer client draws, from the stored state. No `$` here, so it is testable.
-import type { Explorer } from '../../types'
+import type { Entry, Explorer } from '../../types'
 import { displayOf, visualCol } from './editor/editor'
 import type { ExplorerProps, GutterMark, Hint, Palette } from './client'
 import { MAX_DRAWN, visibleEntries, windowTop } from './model'
@@ -35,7 +35,10 @@ export function explorerProps(o: {
   const rows = visibleEntries(ex)
   const rootName = baseName(ex.root) || '/'
   const crumbs = ex.onlyTouched ? [rootName, '✎ touched'] : [rootName, ...(ex.dir ? ex.dir.split('/') : [])]
-  const touchedN = Object.keys(t).length
+  // Inside a repository, touched means what git reports changed now; outside git, the files Claude edited.
+  const repo = ex.repo ?? null
+  const touchedN = repo ? repo.changedFiles.length : Object.keys(t).length
+  const isTouched = (e: Entry) => (repo ? Boolean(e.git && e.git !== '•') : (t[e.path] ?? 0) > 0)
   let props: ExplorerProps
 
   if (ex.preview) {
@@ -159,9 +162,9 @@ export function explorerProps(o: {
       rows: rows.slice(top, top + room).map((r, i) => ({
         icon: r.kind === 'dir' ? '▸' : '·',
         label: r.kind === 'dir' ? `${r.name}/` : r.name,
-        meta: ex.onlyTouched ? `${t[r.path] ?? 0} edits` : r.kind === 'dir' ? '' : `${fmtSize(r.size)} · ${fmtAge(now - r.mtimeMs)}`,
+        meta: ex.onlyTouched && !repo ? `${t[r.path] ?? 0} edits` : r.kind === 'dir' ? '' : `${fmtSize(r.size)} · ${fmtAge(now - r.mtimeMs)}`,
         isDir: r.kind === 'dir',
-        isTouched: (t[r.path] ?? 0) > 0,
+        isTouched: isTouched(r),
         isSelected: top + i === cursor,
         git: r.git === '•' ? { letter: '•', tone: 'modified' as const } : r.git ? statusLetter(r.git) : null,
       })),
@@ -184,7 +187,13 @@ export function explorerProps(o: {
         rows.length > 0
           ? null
           : (ex.error ??
-            (rows.length === 0 ? (ex.onlyTouched ? 'No files touched yet this session.' : ex.filter ? 'Nothing matches the filter.' : 'Empty folder.') : null)),
+            (ex.onlyTouched
+              ? repo
+                ? 'Nothing changed: the files match the last commit.'
+                : 'No files touched yet this session.'
+              : ex.filter
+                ? 'Nothing matches the filter.'
+                : 'Empty folder.')),
       colors: C,
     }
   }

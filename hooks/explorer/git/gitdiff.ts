@@ -1,5 +1,6 @@
 // Pure line-diff logic for the gutter: which lines of the buffer are unsaved, added, modified, staged,
 // or sit where lines were deleted. No `$` here.
+import { isAbsolute, relTo } from '../../shared/paths'
 
 export type Change = 'added' | 'modified'
 
@@ -246,4 +247,12 @@ export function countStatus(status: Map<string, string>): { changed: number; sta
     if (xy !== '??' && (xy[0] ?? ' ') !== ' ') staged++
   }
   return { changed, staged }
+}
+
+/** The files git reports changed, as paths from `root`: deleted files (nothing to open) and files outside `root` left out. */
+export function changedUnder(root: string, top: string, status: Map<string, string>): string[] {
+  return [...status.entries()]
+    .filter(([, xy]) => !xy.includes('D'))
+    .map(([rel]) => relTo(root, `${top}/${rel}`))
+    .filter(path => !isAbsolute(path))
 }

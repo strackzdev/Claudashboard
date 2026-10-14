@@ -1,7 +1,7 @@
 // git for the explorer: the status letters and project bar, and what the open file's gutter compares against.
 import type { EngineInterface } from 'claude-code'
 import type { Entry, RepoInfo } from '../../../types'
-import { countStatus, parseBranch, parsePorcelain, splitText } from './gitdiff'
+import { changedUnder, countStatus, parseBranch, parsePorcelain, splitText } from './gitdiff'
 import { baseName, parentOf, relTo } from '../../shared/paths'
 import { absOf, bumpGitTick, getExplorer, sameLines, updateExplorer } from '../../state'
 
@@ -52,29 +52,40 @@ export async function fetchBase($: EngineInterface, root: string, path: string) 
   }
 }
 
+/** One `git status` of the repository holding `dir`: each changed file's two letters, keyed by its path from `top`. */
+export type RepoStatus = { top: string; status: Map<string, string>; repo: RepoInfo }
+
+/** The status of the repository holding `dir`, or null outside git. */
+export async function repoStatus($: EngineInterface, root: string, dir: string): Promise<RepoStatus | null> {
+  const top = await repoTop($, absOf(root, dir))
+  if (!top) return null
+  const r = await git($, top, ['status', '--porcelain=v1', '-b', '-z', '--untracked-files=all'])
+  if (r.exitCode !== 0) return null
+  const status = parsePorcelain(r.stdout)
+  const changedFiles = changedUnder(root, top, status)
+  return { top, status, repo: { name: baseName(top), ...parseBranch(r.stdout), ...countStatus(status), changedFiles } }
+}
+
+/** The entries with git's letters: a letter per changed file, a dot on folders holding changes. */
+export function withGit(entries: Entry[], s: RepoStatus | null, root: string): Entry[] {
+  const plain = entries.map(e => (e.git === undefined ? e : { ...e, git: undefined }))
+  if (!s) return plain
+  const keys = [...s.status.keys()]
+  return plain.map(e => {
+    const rel = relTo(s.top, absOf(root, e.path))
+    if (e.kind === 'dir') return keys.some(k => k.startsWith(`${rel}/`)) ? { ...e, git: '•' } : e
+    const xy = s.status.get(rel)
+    return xy ? { ...e, git: xy } : e
+  })
+}
+
 /**
- * git status for the entries of `dir`, from one `git status` of its whole repository: a letter per
- * changed file, a dot on folders holding changes, and the project bar's branch and counts.
- * Outside a repository, nothing is asked of git beyond finding that out.
+ * git status for the entries of `dir`, from one `git status` of its whole repository: the letters,
+ * and the project bar's branch and counts. Outside a repository, nothing is asked of git beyond finding that out.
  */
 export async function gitStatusOf($: EngineInterface, root: string, dir: string, entries: Entry[]): Promise<{ entries: Entry[]; repo: RepoInfo | null }> {
-  const plain = entries.map(e => (e.git === undefined ? e : { ...e, git: undefined }))
-  const top = await repoTop($, absOf(root, dir))
-  if (!top) return { entries: plain, repo: null }
-  const r = await git($, top, ['status', '--porcelain=v1', '-b', '-z', '--untracked-files=all'])
-  if (r.exitCode !== 0) return { entries: plain, repo: null }
-  const status = parsePorcelain(r.stdout)
-  const keys = [...status.keys()]
-  const repo: RepoInfo = { name: baseName(top), ...parseBranch(r.stdout), ...countStatus(status) }
-  return {
-    repo,
-    entries: plain.map(e => {
-      const rel = relTo(top, absOf(root, e.path))
-      if (e.kind === 'dir') return keys.some(k => k.startsWith(`${rel}/`)) ? { ...e, git: '•' } : e
-      const xy = status.get(rel)
-      return xy ? { ...e, git: xy } : e
-    }),
-  }
+  const s = await repoStatus($, root, dir)
+  return { entries: withGit(entries, s, root), repo: s?.repo ?? null }
 }
 
 /** Refreshes the git letters and project bar of the folder on screen, and the open file's base. */

@@ -242,6 +242,33 @@ test('a live refresh keeps the cursor on the same file while dotfiles are hidden
   await ui.unmount()
 })
 
+test('in a repo, touched follows git: your own change shows, a revert or commit clears it', async ($, on) => {
+  const clock = mock.clock(on)
+  disk(on, { '/w/a.ts': 'a', '/w/b.ts': 'b' })
+  let status = ''
+  const out = (exitCode: number, stdout: string) => ({ value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
+  on('process.run', (_$, e) => {
+    const args = e.argv.slice(3).join(' ')
+    if (args === 'rev-parse --show-toplevel') return out(0, '/w\n')
+    if (args.startsWith('status')) return out(0, `## main\0${status}`)
+    return out(1, '')
+  })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await ui.key({ key: 't', in: 'explorer' })
+  expect((await explorerProps(ui)).empty).toBe('Nothing changed: the files match the last commit.')
+  // Edited outside Claude: git sees it, so it is touched.
+  status = ' M b.ts\0'
+  await clock.advance(3000)
+  const touched = await explorerProps(ui)
+  expect((touched.rows as Array<{ label: string; isTouched: boolean }>).map(r => [r.label, r.isTouched])).toEqual([['b.ts', true]])
+  // Reverted (or committed): git is clean again, so nothing is touched.
+  status = ''
+  await clock.advance(3000)
+  expect((await explorerProps(ui)).rows).toEqual([])
+  await ui.unmount()
+})
+
 test('the pane stays drawn while a turn runs (its live timer is a valid tree)', async ($, on) => {
   engine(on)
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))

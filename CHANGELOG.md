@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Touched follows git.** In a git repository, the touched view (`t`), its count and the ✎ marks show what `git status` reports changed right now, whoever made the change: your own edits count, and a file you revert or commit leaves the list. The view refreshes every few seconds like a folder does, and the project bar stays on top. Outside git it still shows the files Claude edited this session.
+- Fix: the explorer cursor no longer jumps to another file on a live refresh when dotfiles are hidden or a filter is on.
+- Windows: paths with `\` and drive letters work in the explorer, the touched view and `/strackzdevhub cd`; converted pictures go to the system temp folder.
+
 ## 0.5.0 — 2026-10-13
 
 - **Markdown** files (`.md`, `.markdown`, `.mdx`) open rendered: headings, lists, emphasis, code blocks, tables, links. `m` switches to the source (with the git gutter) and back; `e` edits the source as any file, and leaving the editor shows it rendered again.

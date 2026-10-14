@@ -66,6 +66,8 @@ export type RepoInfo = {
   /** Files with unstaged changes or untracked; files with staged changes. */
   changed: number
   staged: number
+  /** The touched view inside a repository: every file git reports changed, as paths from the explorer's root. */
+  changedFiles: string[]
 }
 
 export type Explorer = {

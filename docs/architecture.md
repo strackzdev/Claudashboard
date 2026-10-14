@@ -80,3 +80,4 @@ The reasons behind the shape are in [`docs/adr/`](adr/):
 - [0003](adr/0003-state-in-one-file.md): every atom read and written in `state.ts`
 - [0004](adr/0004-single-types-contract.md): one self-contained types contract
 - [0005](adr/0005-slash-paths.md): `/` paths inside, converted where they come in
+- [0006](adr/0006-touched-follows-git.md): touched follows `git status` inside a repository

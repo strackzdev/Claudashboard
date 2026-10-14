@@ -192,7 +192,7 @@ export const registerPane = (on: On, C: Colors) => {
 
     // ---- explorer: breadcrumb and rule, the rows, the hint line
     // Inside a git repository, the project bar takes one row above the files.
-    const repo = ex.onlyTouched ? null : (ex.repo ?? null)
+    const repo = ex.repo ?? null
     const room = Math.max(3, bodyRows - vitalsRows - agentsRows - 2 - 3 - (repo ? 1 : 0))
     const props = explorerProps({
       ex,

@@ -1,20 +1,33 @@
 // Pure logic for the in-pane editor: keys against the text, cursor and display columns. No `$` here.
-import type { Preview } from '../types'
-import { hasNoteRow } from './core'
-import type { Key } from './core'
+import type { Preview } from '../../../types'
+import { hasNoteRow } from '../model'
+import type { Key } from '../model'
+import { clamp } from '../../shared/format'
 
 /** Cells a tab takes on screen; the cursor's display column counts it so. */
 export const TAB = 2
 
 /** Key names the surface sends that are not text. */
 const NAMED = new Set([
-  'up', 'down', 'left', 'right', 'return', 'enter', 'tab', 'backspace', 'delete', 'pageup', 'pagedown',
-  'home', 'end', 'escape', 'insert', 'space',
+  'up',
+  'down',
+  'left',
+  'right',
+  'return',
+  'enter',
+  'tab',
+  'backspace',
+  'delete',
+  'pageup',
+  'pagedown',
+  'home',
+  'end',
+  'escape',
+  'insert',
+  'space',
 ])
 
 export type EditEffect = 'save' | 'exit' | 'undo' | null
-
-const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n))
 
 /** A line as drawn: tabs as TAB spaces. */
 export const displayOf = (line: string) => line.replace(/\t/g, ' '.repeat(TAB))

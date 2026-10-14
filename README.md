@@ -180,24 +180,13 @@ Open `/config` and find **strackzdevhub**, or set the values under `pluginConfig
 
 ## Develop
 
-```
-hooks/register.tsx   hooks: vitals, agents, commands, the pane drawing
-hooks/explorer.tsx   the explorer's client module (keys, clicks, list, preview, editor)
-hooks/editor.ts      pure editor logic: keys against the text, cursor, tabs (unit-tested)
-hooks/gitdiff.ts     pure line diff and git status parsing for the gutter (unit-tested)
-hooks/elapsed.tsx    a live timer that ticks without redrawing the pane
-hooks/core.ts        pure logic: formatting, paths, the key reducer (unit-tested)
-types/index.d.ts     the mod's $.state contract
-tests/               claude plugin test
-```
-
 ```sh
 claude plugin validate .     # manifest, marketplace and hooks, as the engine reads them
 claude plugin test .         # unit and drawing tests
 claude --plugin-dir .        # a session with your working copy loaded, hot-reloading on save
 ```
 
-Once the mod has loaded, `.claude-plugin/types/` holds the engine's typings, so `npx tsc -p .` type-checks the code.
+Start with [AGENTS.md](AGENTS.md): the commands, the rules the engine enforces, and links to the [architecture](docs/architecture.md), the [conventions](docs/conventions.md) and the [decision records](docs/adr/).
 
 ## License
 

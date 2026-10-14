@@ -286,6 +286,30 @@ test('a live refresh keeps the cursor on the same file while dotfiles are hidden
   await ui.unmount()
 })
 
+test("d shows the open file's changes against HEAD, and d again goes back to the file", async ($, on) => {
+  engine(on)
+  disk(on, { '/w/a.ts': 'one\nTWO\nthree\n' })
+  repo(on, 'one\ntwo\nthree\n', 'one\ntwo\nthree\n', ' M a.ts\0')
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await ui.key({ key: 'return', in: 'explorer' })
+  await ui.key({ key: 'd', in: 'explorer' })
+  const diff = await explorerProps(ui)
+  expect((diff.diff as Array<{ kind: string; text: string }>).map(r => `${r.kind} ${r.text}`)).toEqual([
+    'hunk @@ -1,3 +1,3 @@',
+    'ctx one',
+    'del two',
+    'add TWO',
+    'ctx three',
+  ])
+  expect((diff.crumbs as string[]).at(-1)).toBe('a.ts · diff')
+  await ui.key({ key: 'd', in: 'explorer' })
+  const back = await explorerProps(ui)
+  expect(back.diff).toBe(null)
+  expect(back.code).not.toBe(null)
+  await ui.unmount()
+})
+
 test('in a repo, touched follows git: your own change shows, a revert or commit clears it', async ($, on) => {
   const clock = mock.clock(on)
   disk(on, { '/w/a.ts': 'a', '/w/b.ts': 'b' })

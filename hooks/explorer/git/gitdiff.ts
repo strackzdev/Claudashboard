@@ -1,5 +1,6 @@
 // Pure line-diff logic for the gutter: which lines of the buffer are unsaved, added, modified, staged,
 // or sit where lines were deleted. No `$` here.
+import type { DiffRow } from '../../../types'
 import { isAbsolute, relTo } from '../../shared/paths'
 
 export type Change = 'added' | 'modified'
@@ -255,4 +256,57 @@ export function changedUnder(root: string, top: string, status: Map<string, stri
     .filter(([, xy]) => !xy.includes('D'))
     .map(([rel]) => relTo(root, `${top}/${rel}`))
     .filter(path => !isAbsolute(path))
+}
+
+/**
+ * The changes from `a` to `b` as `git diff` shows them: hunks with `context` shared lines around each
+ * change, under a `@@ -start,count +start,count @@` header; line numbers start at 1. Nothing changed, no rows.
+ */
+export function diffRows(a: readonly string[], b: readonly string[], context = 3): DiffRow[] {
+  let pre = 0
+  while (pre < a.length && pre < b.length && a[pre] === b[pre]) pre++
+  let suf = 0
+  while (suf < a.length - pre && suf < b.length - pre && a[a.length - 1 - suf] === b[b.length - 1 - suf]) suf++
+  const midA = a.slice(pre, a.length - suf)
+  const midB = b.slice(pre, b.length - suf)
+  // Past MAX_EDITS the middle shows as all removed, then all added.
+  const mid: Op[] = myers(midA, midB) ?? [...midA.map(() => 1 as const), ...midB.map(() => 2 as const)]
+  const ops: Op[] = [...new Array<Op>(pre).fill(0), ...mid, ...new Array<Op>(suf).fill(0)]
+
+  // Every line with its position on each side.
+  const lines: Array<{ op: Op; ia: number; ib: number }> = []
+  let ia = 0
+  let ib = 0
+  for (const op of ops) {
+    lines.push({ op, ia, ib })
+    if (op !== 2) ia++
+    if (op !== 1) ib++
+  }
+  const changed = lines.flatMap((l, i) => (l.op === 0 ? [] : [i]))
+  if (changed.length === 0) return []
+
+  // Hunks: each change with its context, merged where their contexts touch.
+  const spans: Array<[number, number]> = []
+  for (const i of changed) {
+    const from = Math.max(0, i - context)
+    const to = Math.min(lines.length - 1, i + context)
+    const last = spans[spans.length - 1]
+    if (last && from <= last[1] + 1) last[1] = Math.max(last[1], to)
+    else spans.push([from, to])
+  }
+  const rows: DiffRow[] = []
+  for (const [from, to] of spans) {
+    const body = lines.slice(from, to + 1)
+    const first = body[0] ?? { ia: 0, ib: 0 }
+    const oldN = body.filter(l => l.op !== 2).length
+    const newN = body.filter(l => l.op !== 1).length
+    const at = (start: number, n: number) => `${n === 0 ? start : start + 1},${n}`
+    rows.push({ kind: 'hunk', text: `@@ -${at(first.ia, oldN)} +${at(first.ib, newN)} @@`, old: null, new: null })
+    for (const l of body) {
+      if (l.op === 0) rows.push({ kind: 'ctx', text: a[l.ia] ?? '', old: l.ia + 1, new: l.ib + 1 })
+      else if (l.op === 1) rows.push({ kind: 'del', text: a[l.ia] ?? '', old: l.ia + 1, new: null })
+      else rows.push({ kind: 'add', text: b[l.ib] ?? '', old: null, new: l.ib + 1 })
+    }
+  }
+  return rows
 }

@@ -1,6 +1,7 @@
 // The explorer's surface module: draws what the hooks module hands it and posts keys and clicks back.
 // It holds no explorer state of its own; a click inside gives it the keyboard, Esc hands it back.
 import type { ClientModule } from 'claude-code'
+import type { DiffRow } from '../../types'
 
 export type GitLetter = { letter: string; tone: 'staged' | 'modified' | 'untracked' | 'deleted' | 'conflict' }
 
@@ -75,6 +76,8 @@ export type ExplorerProps = {
   markdown: string | null
   /** The editor's window: display lines (tabs expanded), the cursor in it, the gutter and text widths. */
   edit: EditView | null
+  /** The diff view's rows in view: hunk headers, shared lines, removed and added lines. */
+  diff: DiffRow[] | null
 }
 
 export type EditView = {
@@ -136,6 +139,7 @@ function complete(raw: Partial<ExplorerProps> | null | undefined): ExplorerProps
     changes: p.changes && typeof p.changes.added === 'number' ? p.changes : null,
     markdown: typeof p.markdown === 'string' ? p.markdown : null,
     edit: p.edit && Array.isArray(p.edit.lines) ? p.edit : null,
+    diff: Array.isArray(p.diff) ? p.diff : null,
   }
 }
 
@@ -320,6 +324,28 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
     </Box>
   ) : null
 
+  // The diff view: the new line's number (the old one's on a removed line), a +/- mark, the text.
+  const diffNumW = Math.max(3, ...(props.diff ?? []).map(r => String(r.new ?? r.old ?? '').length))
+  const diffView = props.diff ? (
+    <Box flexDirection="column">
+      {props.diff.map(r =>
+        r.kind === 'hunk' ? (
+          <Text color={c.accent} dimColor wrap="truncate-end">
+            {r.text}
+          </Text>
+        ) : (
+          <Text wrap="truncate-end">
+            <Text color={c.dim}>{`${String(r.new ?? r.old ?? '').padStart(diffNumW)} `}</Text>
+            <Text color={r.kind === 'add' ? c.ok : r.kind === 'del' ? c.bad : c.dim} bold>
+              {r.kind === 'add' ? '+' : r.kind === 'del' ? '−' : ' '}
+            </Text>
+            <Text color={r.kind === 'add' ? c.ok : r.kind === 'del' ? c.bad : c.text}>{` ${r.text || ' '}`}</Text>
+          </Text>
+        ),
+      )}
+    </Box>
+  ) : null
+
   const numW = Math.max(3, String((props.code?.startLine ?? 1) + Math.max(0, (props.code?.source.split('\n').length ?? 1) - 1)).length)
   const preview = (
     <Box flexDirection="column" height={props.room}>
@@ -329,6 +355,7 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
         </Text>
       ) : null}
       {editor}
+      {diffView}
       {props.markdown !== null ? (
         <Box flexDirection="column" width={W} height={Math.max(1, props.room - (props.note ? 1 : 0))} overflow="hidden">
           <Markdown text={props.markdown || ' '} />

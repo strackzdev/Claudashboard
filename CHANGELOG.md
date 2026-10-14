@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Diff view**: `d` on an open file shows its changes as `git diff` does, against the last commit (outside git, against the text as first opened): hunk headers, added lines in green with `+`, removed lines in red with `−`, three lines of context, line numbers. Scroll as usual; `d` or `⌫` goes back to the file where you were.
 - **Live activity in the file tree**: while a turn runs, a file Claude (or a subagent) reads shows **◉** in purple and a file it edits **✎** in yellow, bold, and so does every folder above it. The marks clear when the turn ends, and the git colours show again.
 - **Context alarm**: from 80% the session box's frame and gauge turn orange with *⚠ filling up*, from 90% red with *⚠ compact soon*. A toast says so once per threshold, and a line under the prompt keeps the percentage in view even with the pane closed; it clears after a compaction.
 - **Turn sparklines**: a `turn` row in the session box draws the last 16 turns' cost (`$ ▁▃█▂`) and length (`⏱ ▂▅▁▃`), with their count and averages.

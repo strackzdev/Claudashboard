@@ -1,5 +1,8 @@
 export type Limit = { kind: string; pct: number }
 
+/** One row of the diff view: a hunk header, a line both sides share, or one only the old or new side has. */
+export type DiffRow = { kind: 'hunk' | 'ctx' | 'add' | 'del'; text: string; old: number | null; new: number | null }
+
 /** What a tool call does to a file: `read` (Read) or `edit` (Edit, Write, MultiEdit, NotebookEdit). */
 export type Activity = 'read' | 'edit'
 
@@ -63,6 +66,8 @@ export type Preview = {
   mdView?: 'rendered' | 'source'
   /** A picture's PNG on disk (converted when the file is not a PNG) and its pixel size. */
   image?: { file: string; width: number; height: number } | null
+  /** The diff view (`d`): the file's changes against git's HEAD (or the text as first opened, outside git), and where the file view was scrolled. */
+  diff?: { rows: DiffRow[]; fileTop: number } | null
 }
 
 /** The git repository the folder on screen belongs to: drawn as the project bar above the files. */

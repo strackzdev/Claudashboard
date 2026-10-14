@@ -70,6 +70,7 @@ export function explorerProps(o: {
           ]
         : [
             ...(p.readOnly ? [] : [{ key: 'e', label: 'edit' }]),
+            { key: 'd', label: 'diff' },
             ...(p.kind === 'markdown' ? [{ key: 'm', label: p.mdView === 'source' ? 'rendered' : 'source' }] : []),
             { key: '↑↓', label: 'scroll' },
             { key: 'PgUp/Dn', label: 'page' },
@@ -133,8 +134,29 @@ export function explorerProps(o: {
       gutter: isRendered ? null : gutter,
       changes,
       edit,
+      diff: null,
     }
     // A picture's size sits bottom right, like a file's line count; the note line is kept for problems.
+    // The diff view (d) draws its rows in the code's place.
+    if (p.diff) {
+      const rows = p.diff.rows
+      const dEnd = Math.min(rows.length, p.top + codeRoom)
+      props = {
+        ...props,
+        crumbs: [rootName, ...p.path.split('/').slice(0, -1), `${baseName(p.path)} · diff`],
+        counter: `${p.top + 1}–${dEnd} / ${rows.length}`,
+        hints: [
+          { key: '↑↓', label: 'scroll' },
+          { key: 'PgUp/Dn', label: 'page' },
+          { key: 'd', label: 'back to file' },
+          { key: '@', label: 'mention' },
+        ],
+        code: null,
+        markdown: null,
+        gutter: null,
+        diff: rows.slice(p.top, dEnd),
+      }
+    }
     if (p.kind === 'image') {
       props = {
         ...props,
@@ -193,6 +215,7 @@ export function explorerProps(o: {
       changes: null,
       markdown: null,
       edit: null,
+      diff: null,
       empty:
         rows.length > 0
           ? null

@@ -7,11 +7,22 @@ import { hasNoteRow } from '../model'
 import { loadPreview } from '../files'
 import { MAX_UNDO, absOf, changedOnDisk, getExplorer, history, sameLines, saved, setPreview, toKey } from '../../state'
 
+/** Where the file view is scrolled, under the diff view when it is open. */
+const fileTopOf = (p: Preview) => p.diff?.fileTop ?? p.top
+
 export async function enterEdit($: EngineInterface) {
   await setPreview($, p =>
     p.readOnly
       ? { ...p, status: `read-only: ${p.readOnly}` }
-      : { ...p, mode: 'edit', row: Math.min(Math.max(p.row, p.top), Math.max(0, p.lines.length - 1)), status: null, confirm: null },
+      : {
+          ...p,
+          diff: null,
+          top: fileTopOf(p),
+          mode: 'edit',
+          row: Math.min(Math.max(p.row, fileTopOf(p)), Math.max(0, p.lines.length - 1)),
+          status: null,
+          confirm: null,
+        },
   )
 }
 

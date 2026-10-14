@@ -64,6 +64,7 @@ export function emptyPreview(path: string, over: Partial<Preview> = {}): Preview
     kind: 'text',
     mdView: 'rendered',
     image: null,
+    diff: null,
     ...over,
   }
 }
@@ -96,7 +97,13 @@ export function previewOf(path: string, text: string, size: number, mtimeMs = 0)
 }
 
 export type Effect =
-  { kind: 'open'; entry: Entry; edit?: true } | { kind: 'edit' } | { kind: 'up' } | { kind: 'mention'; path: string } | { kind: 'reload' } | null
+  | { kind: 'open'; entry: Entry; edit?: true }
+  | { kind: 'edit' }
+  | { kind: 'up' }
+  | { kind: 'mention'; path: string }
+  | { kind: 'reload' }
+  | { kind: 'diff' }
+  | null
 
 export type Key = { key: string; ctrl?: true; meta?: true; shift?: true }
 
@@ -107,6 +114,25 @@ export type Key = { key: string; ctrl?: true; meta?: true; shift?: true }
 export function reduceKey(ex: Explorer, k: Key, room: number): { ex: Explorer; effect: Effect } {
   const page = Math.max(1, room - 1)
   const key = k.key
+
+  if (ex.preview?.diff) {
+    const p = ex.preview
+    const d = ex.preview.diff
+    const last = Math.max(0, d.rows.length - (hasNoteRow(p) ? room - 1 : room))
+    const scroll = (top: number) => ({ ex: { ...ex, preview: { ...p, top: clamp(top, 0, last) } }, effect: null })
+    // Back to the file where it was scrolled.
+    if (key === 'd' || key === 'backspace' || key === 'left' || key === 'h' || key === 'q') {
+      return { ex: { ...ex, preview: { ...p, diff: null, top: d.fileTop } }, effect: null }
+    }
+    if (key === 'down' || key === 'j') return scroll(p.top + 1)
+    if (key === 'up' || key === 'k') return scroll(p.top - 1)
+    if (key === 'pagedown' || key === 'space' || key === ' ') return scroll(p.top + page)
+    if (key === 'pageup') return scroll(p.top - page)
+    if (key === 'home' || key === 'g') return scroll(0)
+    if (key === 'end' || key === 'G') return scroll(last)
+    if (key === '@') return { ex, effect: { kind: 'mention', path: p.path } }
+    return { ex, effect: null }
+  }
 
   if (ex.preview) {
     const p = ex.preview
@@ -123,6 +149,7 @@ export function reduceKey(ex: Explorer, k: Key, room: number): { ex: Explorer; e
     if (key === '@') return { ex, effect: { kind: 'mention', path: p.path } }
     if (key === 'e') return { ex, effect: { kind: 'edit' } }
     if (key === 'r') return { ex, effect: { kind: 'reload' } }
+    if (key === 'd' && p.kind !== 'image') return { ex, effect: { kind: 'diff' } }
     if (key === 'm' && p.kind === 'markdown') {
       return { ex: { ...ex, preview: { ...p, mdView: p.mdView === 'source' ? 'rendered' : 'source' } }, effect: null }
     }

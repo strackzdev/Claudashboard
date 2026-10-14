@@ -3,6 +3,7 @@ import type { EngineInterface } from 'claude-code'
 import type { Entry, Explorer, Preview, RepoInfo } from '../../types'
 import { MAX_PREVIEW_BYTES, emptyPreview, previewOf, sortEntries, touchedEntries, visibleEntries } from './model'
 import { bases, fetchBase, gitStatusOf, opened, repoStatus, withGit } from './git/git'
+import { diffRows } from './git/gitdiff'
 import { kindOf } from './media/media'
 import { joinPath, parentOf, relTo, toSlash } from '../shared/paths'
 import { loadPicture } from './media/picture'
@@ -170,4 +171,19 @@ export async function noteEdit($: EngineInterface, e: unknown) {
   // A new file in the folder on screen shows without a manual refresh.
   if (!ex.preview && !ex.onlyTouched && parentOf(path) === ex.dir && !ex.entries.some(x => x.path === path)) await loadDir($, ex.dir)
   if (ex.onlyTouched) await loadDir($, ex.dir)
+}
+
+/** The diff view of the file in the preview: its text against git's HEAD, or outside git the text as first opened. */
+export async function openDiff($: EngineInterface) {
+  const ex = await getExplorer($)
+  const p = ex.preview
+  if (!p) return
+  const base = bases.get(p.path)
+  if (!base) {
+    void fetchBase($, ex.root, p.path).catch(logged($, 'fetchBase'))
+    return setPreview($, x => ({ ...x, status: "reading git's copy of the file: press d again in a moment" }))
+  }
+  const rows = diffRows(base.head, p.lines)
+  if (rows.length === 0) return setPreview($, x => ({ ...x, status: base.repo ? 'no changes since the last commit' : 'no changes since the file was opened' }))
+  await setPreview($, x => ({ ...x, diff: { rows, fileTop: x.top }, top: 0, status: null }))
 }

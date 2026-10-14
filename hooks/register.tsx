@@ -7,7 +7,7 @@ import { describeTool, normalizeAgent, stepAgent } from './agents/agents'
 import { editMessage, enterEdit, leaveEdit, saveFile } from './explorer/editor/editing'
 import type { UiMessage } from './explorer/client'
 import { DEFAULT_EXPLORER, reduceKey, visibleEntries } from './explorer/model'
-import { loadDir, loadPreview, noteEdit, poll } from './explorer/files'
+import { loadDir, loadPreview, noteEdit, openDiff, poll } from './explorer/files'
 import { refreshGit } from './explorer/git/git'
 import { ONE_DARK, THEME, registerPane } from './pane'
 import { isAbsolute, parentOf, relTo, toSlash } from './shared/paths'
@@ -340,6 +340,7 @@ export const register: Register = (on, options) => {
     else if (effect?.kind === 'edit') await enterEdit($)
     else if (effect?.kind === 'up') await goUp($)
     else if (effect?.kind === 'mention') await mention($, effect.path)
+    else if (effect?.kind === 'diff') await openDiff($)
     else if (effect?.kind === 'reload') await (nextEx.preview ? refreshGit($) : loadDir($, nextEx.dir))
     return {}
   })

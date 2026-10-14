@@ -2,6 +2,8 @@
 
 **A clean hub pane for Claude Code.** It shows the session's vitals, the subagents that are working right now, and a file explorer you drive with the mouse or the keyboard, with a syntax-highlighted preview and a small editor inside the pane.
 
+![Claudashboard's basic view: the session box with the turns row, one subagent running, and the explorer on a clean git repository](docs/images/basic-view.png)
+
 ```
 ╭──────────────────────────────────────────────────────╮
 │ SESSION                                  ● 0:37      │

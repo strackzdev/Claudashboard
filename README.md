@@ -62,11 +62,12 @@ claude --plugin-dir ./claude_strackzdevhub
 | --- | --- |
 | **Model** | The main loop's model. `1M` means the long-context variant. It's read when the session starts and updated on every step. |
 | **Effort** | The current turn's reasoning effort, from `low` to `max`. |
-| **Permission mode** | `default`, `auto`, `plan`, `acceptEdits` or `bypassPermissions`, each in its own colour. |
+| **Permission mode** | `default`, `auto`, `plan`, `acceptEdits` or `bypassPermissions`, each in its own colour. Updated on each prompt, tool call and turn end (Claude Code raises no event for Shift+Tab itself). |
 | **Turn** | `●` and a live timer while Claude works. `○ idle` and the last turn's length when it's done. |
-| **Context** | A gauge plus used / window tokens. Green, then amber at 70%, then red at 85%. `⟲n` counts compactions. |
+| **Context** | A gauge plus used / window tokens. `⟲n` counts compactions. From 80% the box's frame and gauge turn amber with *⚠ filling up*; from 90% red with *⚠ compact soon*. A toast marks each threshold once, and a line under the prompt keeps the percentage in view with the pane closed. |
 | **Cost** | The session total, plus what the last turn added. |
 | **Limits** | The 5-hour and 7-day rate-limit windows, when your plan reports them. |
+| **Turns** | Off by default; `/strackzdevhub turns` shows it (remembered across sessions). `12 turns  cost ▁▃█▂ $0.21 (avg $0.11)   time ▂▅▁▃ 0:20 (avg 0:14)`: one bar per turn, oldest left and latest right (up to 16), each followed by the latest turn's value and the average. |
 
 ### Agents
 This section appears only while subagents run. Each running agent gets a card showing:
@@ -95,9 +96,11 @@ The explorer starts at the session's working directory.
 | `/` | filter by name as you type (`⏎` or `Tab` to finish) | — |
 | `.` | show / hide dotfiles | — |
 | `m` | — | Markdown: rendered ↔ source |
-| `t` | only files Claude touched this session | — |
+| `t` | only touched files: in a git repository, what `git status` reports changed; elsewhere, what Claude edited this session | — |
 | `r` | refresh | refresh the git marks |
-| `@` | insert `@path` into your prompt | insert `@path` into your prompt |
+| `d` | — | diff against the last commit (`d` or `⌫` back to the file) |
+| click, shift+click, drag | — | pick lines; `@` then mentions just them (`@src/a.ts#10-20`) |
+| `@` | insert `@path` into your prompt | insert `@path` (with the picked lines, if any) into your prompt |
 | `e` | open the file straight into edit mode | switch to edit mode |
 
 ### Editing a file
@@ -150,7 +153,9 @@ While the pane is open, it refreshes every 3 seconds: files you edit, create or 
 
 Outside a git repository, the gutter compares the file with how it was when you first opened it, so lines you changed and saved still show (`since opened`). The marks refresh after each save, when you leave the file, after each Claude turn, and when you press `r` in the preview.
 
-Files Claude edited or created this session are marked **✎** in yellow, and new files appear automatically. The preview won't show binary files or files over 1 MB, and it shows at most the first 5,000 lines.
+While a turn runs, a file Claude (or a subagent) is reading shows **◉** in purple and a file it's editing **✎** in yellow, bold, and so does every folder above it; the marks clear when the turn ends.
+
+Touched files are marked **✎**. In a git repository that means what `git status` reports changed right now, whoever changed it: a file you revert or commit is no longer touched. Outside git, it means the files Claude edited or created this session. New files appear automatically. The preview won't show binary files or files over 1 MB, and it shows at most the first 5,000 lines.
 
 ## Commands
 
@@ -160,7 +165,8 @@ Files Claude edited or created this session are marked **✎** in yellow, and ne
 | `/strackzdevhub close` | close it |
 | `/strackzdevhub save` | save the file being edited |
 | `/strackzdevhub cd <path>` | jump the explorer to a folder: relative to the working directory, or an absolute path inside it (`..` is refused) |
-| `/strackzdevhub reset` | clear the touched files and agents, and move the explorer back to the root |
+| `/strackzdevhub reset` | clear Claude's touched files (outside git) and the agents, and move the explorer back to the root |
+| `/strackzdevhub turns [on\|off]` | show or hide the session box's turns row (cost and length of the last turns); remembered across sessions |
 
 ## Configure
 

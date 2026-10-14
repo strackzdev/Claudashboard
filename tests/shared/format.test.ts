@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { windowTop } from '../../hooks/explorer/model'
-import { fmtAge, gauge, prettyModel } from '../../hooks/shared/format'
+import { fmtAge, gauge, prettyModel, sparkline } from '../../hooks/shared/format'
 import { isAbsolute, parentOf, relTo, toSlash } from '../../hooks/shared/paths'
 
 test('paths and formatting', () => {
@@ -23,4 +23,10 @@ test('Windows paths: backslashes become slashes, a drive letter is absolute', ()
   expect(isAbsolute('C:/x')).toBe(true)
   expect(isAbsolute('/x')).toBe(true)
   expect(isAbsolute('src/x')).toBe(false)
+})
+
+test('a sparkline scales its bars to the largest value', () => {
+  expect(sparkline([1, 4, 2])).toBe('▃█▅')
+  expect(sparkline([0, 0])).toBe('▁▁')
+  expect(sparkline([])).toBe('')
 })

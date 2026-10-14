@@ -1,12 +1,13 @@
 // The pane's drawing: three boxes from the stored state, the explorer drawn by its client module.
 import type { On } from 'claude-code'
 import type { Palette } from './explorer/client'
-import { EFFORT_LEVEL, clipEnd, fmtDuration, fmtTokens, fmtUsd, gauge, hasLongContext, limitLabel, modeColorKey, prettyModel } from './shared/format'
+import { EFFORT_LEVEL, clipEnd, fmtDuration, fmtTokens, fmtUsd, gauge, hasLongContext, limitLabel, modeColorKey, prettyModel, sparkline } from './shared/format'
 import { bases } from './explorer/git/git'
 import { explorerProps } from './explorer/props'
 import { fitPicture } from './explorer/media/media'
+import { contextLevel, turnStats } from './session/vitals'
 import { baseName } from './shared/paths'
-import { PANE, getAgents, getExplorer, getTouched, getVitals, paneState, readGitTick, saved } from './state'
+import { PANE, getActivity, getAgents, getExplorer, getTouched, getVitals, paneState, readGitTick, saved } from './state'
 
 export type Colors = Palette & { ok: string; bad: string; info: string; purple: string; frame: string }
 
@@ -55,7 +56,15 @@ export const registerPane = (on: On, C: Colors) => {
     const els = $.ui.resolve(e)
     const { Box, Text } = els
     const hasClient = 'Client' in els
-    const [v, ex, t, list, now] = await Promise.all([getVitals($), getExplorer($), getTouched($), getAgents($), $.clock.now(), readGitTick($)])
+    const [v, ex, t, list, now, act] = await Promise.all([
+      getVitals($),
+      getExplorer($),
+      getTouched($),
+      getAgents($),
+      $.clock.now(),
+      getActivity($),
+      readGitTick($),
+    ])
     // The pane's real width: drawing wider than it would overflow; every row below truncates instead.
     const W = Math.max(24, e.props.bodyColumns)
     const inner = W - 4 // a section's round border and its one-cell padding each side
@@ -77,9 +86,14 @@ export const registerPane = (on: On, C: Colors) => {
     )
 
     // ---- vitals
+    // The turns row: oldest turn left, the latest right; sparklines shorten on a narrow pane so both series fit.
+    const ts = turnStats(v.turns)
+    const sparkW = Math.max(3, Math.min(16, Math.floor((inner - 50) / 2)))
     const effortN = EFFORT_LEVEL[v.effort] ?? 0
     const pct = v.pct ?? 0
-    const ctxColor = pct >= 85 ? C.bad : pct >= 70 ? C.warn : C.ok
+    // From 80% the box warns, from 90% it says to compact: frame, gauge and a label beside it.
+    const level = contextLevel(v.pct)
+    const ctxColor = level === 2 ? C.bad : level === 1 ? C.warn : C.ok
     const gaugeW = Math.max(6, Math.min(24, inner - 36))
     const modeColor = C[modeColorKey(v.mode)]
     const isRunning = v.turnStartedAt !== null
@@ -124,6 +138,11 @@ export const registerPane = (on: On, C: Colors) => {
             )}
             {v.tokens !== null && v.window ? <Text color={C.dim}>{`  ${fmtTokens(v.tokens)} / ${fmtTokens(v.window)}`}</Text> : null}
             {v.compactions > 0 ? <Text color={C.dim}>{`  ⟲${v.compactions}`}</Text> : null}
+            {level > 0 ? (
+              <Text color={ctxColor} bold>
+                {level === 2 ? '  ⚠ compact soon' : '  ⚠ filling up'}
+              </Text>
+            ) : null}
           </Text>
           <Text>
             <Text color={C.ok} bold>
@@ -144,9 +163,32 @@ export const registerPane = (on: On, C: Colors) => {
             ))}
           </Text>
         ) : null}
+        {v.showTurns && ts.count === 0 ? (
+          <Text color={C.dim} wrap="truncate-end">
+            {'turns  none finished yet'}
+          </Text>
+        ) : null}
+        {v.showTurns && ts.count > 0 ? (
+          <Text wrap="truncate-end">
+            <Text color={C.dim}>{`${ts.count} ${ts.count === 1 ? 'turn ' : 'turns'}  `}</Text>
+            {ts.costs ? (
+              <Text>
+                <Text color={C.dim}>{'cost '}</Text>
+                <Text color={C.ok}>{sparkline(ts.costs.slice(-sparkW))}</Text>
+                <Text color={C.text}>{` ${ts.lastCost === null ? '—' : fmtUsd(ts.lastCost)}`}</Text>
+                <Text color={C.dim}>{` (avg ${fmtUsd(ts.avgCost ?? 0)})   `}</Text>
+              </Text>
+            ) : null}
+            <Text color={C.dim}>{'time '}</Text>
+            <Text color={C.accent}>{sparkline(ts.times.slice(-sparkW))}</Text>
+            <Text color={C.text}>{` ${fmtDuration(ts.lastMs)}`}</Text>
+            <Text color={C.dim}>{` (avg ${fmtDuration(ts.avgMs)})`}</Text>
+          </Text>
+        ) : null}
       </Box>,
+      level === 2 ? C.bad : level === 1 ? C.warn : C.frame,
     )
-    const vitalsRows = 2 + 1 + 2 + (v.limits.length > 0 ? 1 : 0)
+    const vitalsRows = 2 + 1 + 2 + (v.limits.length > 0 ? 1 : 0) + (v.showTurns ? 1 : 0)
 
     // ---- agents: only while some run; each leaves when it finishes
     // Agents give way before the file list drops under 3 rows.
@@ -192,11 +234,12 @@ export const registerPane = (on: On, C: Colors) => {
 
     // ---- explorer: breadcrumb and rule, the rows, the hint line
     // Inside a git repository, the project bar takes one row above the files.
-    const repo = ex.onlyTouched ? null : (ex.repo ?? null)
+    const repo = ex.repo ?? null
     const room = Math.max(3, bodyRows - vitalsRows - agentsRows - 2 - 3 - (repo ? 1 : 0))
     const props = explorerProps({
       ex,
       touched: t,
+      activity: act,
       now,
       room,
       width: inner,

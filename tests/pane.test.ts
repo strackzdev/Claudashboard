@@ -33,6 +33,66 @@ test('the pane draws the vitals on every surface and width', async ($, on) => {
   }
 })
 
+test('the context alarm: the box warns from 80%, says to compact from 90%, and toasts once per threshold', async ($, on) => {
+  engine(on)
+  const toasts: string[] = []
+  const status: Array<string | undefined> = []
+  on('ui.toast', (_$, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
+  on('ui.status', (_$, e) => {
+    status.push(e.text)
+    return { value: undefined }
+  })
+  on('session.measure', () => ({ changed: [] }))
+  const measure = (percent: number) => $.session.measure({ context: { percent, tokens: percent * 1000, window: 100_000 }, rateLimits: [] } as never)
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await measure(85)
+  expect(await ui.find({ text: /filling up/ })).toBeDefined()
+  await measure(88)
+  await measure(92)
+  expect(await ui.find({ text: /compact soon/ })).toBeDefined()
+  expect(toasts).toEqual(['Context 85% full', 'Context 92% full: run /compact soon'])
+  expect(status.at(-1)).toBe('⚠ context 92%: compact soon')
+  // After a compaction the alarm clears.
+  await measure(30)
+  expect(status.at(-1)).toBe(undefined)
+  expect(await ui.find({ text: /compact soon/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('the turns row is off until /strackzdevhub turns, then shows the finished turns', async ($, on) => {
+  const clock = mock.clock(on)
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  const stored: Record<string, unknown> = {}
+  on('store.set', (_$, e) => {
+    stored[e.key] = e.value
+    return { value: undefined }
+  })
+  await $.turn.start({ turnId: 't1', text: 'hello' } as never)
+  await clock.advance(42_000)
+  await $.turn.complete({ turnId: 't1', answer: 'done', durationMs: 42_000, isAborted: false, reason: 'answer' })
+  const hidden = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  expect(await hidden.find({ text: /^time $/ })).toBeUndefined()
+  await hidden.unmount()
+
+  const turnedOn = await $.command.run({ command: 'strackzdevhub', args: 'turns' } as never)
+  expect(turnedOn.text).toContain('turns row on')
+  // Remembered for the next session.
+  expect(stored.showTurns).toBe(true)
+  const shown = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  expect(await shown.find({ text: /^1 turn/ })).toBeDefined()
+  expect(await shown.find({ text: / \(avg 0:42\)$/ })).toBeDefined()
+  await shown.unmount()
+
+  await $.command.run({ command: 'strackzdevhub', args: 'turns off' } as never)
+  const off = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  expect(await off.find({ text: /^1 turn/ })).toBeUndefined()
+  await off.unmount()
+})
+
 test('the agents section shows while agents run, and leaves with them', async ($, on) => {
   engine(on)
   on('agent.spawn', () => ({ agentId: 'a1', model: 'claude-haiku-5-5' }))
@@ -239,6 +299,128 @@ test('a live refresh keeps the cursor on the same file while dotfiles are hidden
   await clock.advance(3000)
   const rows = (await explorerProps(ui)).rows as Array<{ label: string; isSelected: boolean }>
   expect(rows.find(r => r.isSelected)?.label).toBe('b.ts')
+  await ui.unmount()
+})
+
+test("d shows the open file's changes against HEAD, and d again goes back to the file", async ($, on) => {
+  engine(on)
+  disk(on, { '/w/a.ts': 'one\nTWO\nthree\n' })
+  repo(on, 'one\ntwo\nthree\n', 'one\ntwo\nthree\n', ' M a.ts\0')
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await ui.key({ key: 'return', in: 'explorer' })
+  await ui.key({ key: 'd', in: 'explorer' })
+  const diff = await explorerProps(ui)
+  expect((diff.diff as Array<{ kind: string; text: string }>).map(r => `${r.kind} ${r.text}`)).toEqual([
+    'hunk @@ -1,3 +1,3 @@',
+    'ctx one',
+    'del two',
+    'add TWO',
+    'ctx three',
+  ])
+  expect((diff.crumbs as string[]).at(-1)).toBe('a.ts · diff')
+  await ui.key({ key: 'd', in: 'explorer' })
+  const back = await explorerProps(ui)
+  expect(back.diff).toBe(null)
+  expect(back.code).not.toBe(null)
+  await ui.unmount()
+})
+
+test('pick lines in the file view with a click and shift+click (or a drag), then @ mentions just them', async ($, on) => {
+  engine(on)
+  disk(on, { '/w/a.ts': 'l1\nl2\nl3\nl4\nl5\n' })
+  let filled = ''
+  on('prompt.fill', (_$, e) => {
+    filled = e.text
+    return { isFilled: true }
+  })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await ui.key({ key: 'return', in: 'explorer' })
+  // Rows 0 and 1 are the header and the rule: the file's first line is row 2.
+  await ui.pointer({ type: 'down', x: 8, y: 3, button: 'left', in: 'explorer' })
+  await ui.pointer({ type: 'down', x: 8, y: 4, button: 'left', shift: true, in: 'explorer' })
+  expect((await explorerProps(ui)).selection).toEqual([2, 3])
+  await ui.key({ key: '@', in: 'explorer' })
+  expect(filled).toBe('@a.ts#2-3 ')
+  // A drag picks from where it started.
+  await ui.pointer({ type: 'down', x: 8, y: 2, button: 'left', in: 'explorer' })
+  await ui.pointer({ type: 'move', x: 8, y: 5, button: 'left', in: 'explorer' })
+  expect((await explorerProps(ui)).selection).toEqual([1, 4])
+  // Clicking the one picked line again clears the pick.
+  await ui.pointer({ type: 'down', x: 8, y: 6, button: 'left', in: 'explorer' })
+  await ui.pointer({ type: 'down', x: 8, y: 6, button: 'left', in: 'explorer' })
+  expect((await explorerProps(ui)).selection).toBe(null)
+  await ui.unmount()
+})
+
+test('in a repo, touched follows git: your own change shows, a revert or commit clears it', async ($, on) => {
+  const clock = mock.clock(on)
+  disk(on, { '/w/a.ts': 'a', '/w/b.ts': 'b' })
+  let status = ''
+  const out = (exitCode: number, stdout: string) => ({ value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
+  on('process.run', (_$, e) => {
+    const args = e.argv.slice(3).join(' ')
+    if (args === 'rev-parse --show-toplevel') return out(0, '/w\n')
+    if (args.startsWith('status')) return out(0, `## main\0${status}`)
+    return out(1, '')
+  })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await ui.key({ key: 't', in: 'explorer' })
+  expect((await explorerProps(ui)).empty).toBe('Nothing changed: the files match the last commit.')
+  // Edited outside Claude: git sees it, so it is touched.
+  status = ' M b.ts\0'
+  await clock.advance(3000)
+  const touched = await explorerProps(ui)
+  expect((touched.rows as Array<{ label: string; isTouched: boolean }>).map(r => [r.label, r.isTouched])).toEqual([['b.ts', true]])
+  // Reverted (or committed): git is clean again, so nothing is touched.
+  status = ''
+  await clock.advance(3000)
+  expect((await explorerProps(ui)).rows).toEqual([])
+  await ui.unmount()
+})
+
+test('the mode tag follows a switch without a new prompt: the end of a turn carries the mode', async ($, on) => {
+  engine(on)
+  disk(on, { '/w/a.ts': 'a' })
+  // The engine's own side of the classic hooks: nothing to add.
+  on('classic.UserPromptSubmit', () => ({}))
+  on('classic.Stop', () => ({}))
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await $.classic.UserPromptSubmit({ prompt: 'hi', permission_mode: 'auto' } as never)
+  expect(await ui.find({ text: /^auto$/ })).toBeDefined()
+  // Shift+Tab to plan mid-turn: the turn's end reports the new mode.
+  await $.classic.Stop({ permission_mode: 'plan', stop_hook_active: false } as never)
+  expect(await ui.find({ text: /^plan$/ })).toBeDefined()
+  // A subagent's events never change the main loop's tag.
+  await $.classic.Stop({ permission_mode: 'acceptEdits', agent_id: 'a1', stop_hook_active: false } as never)
+  expect(await ui.find({ text: /^plan$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the file tree shows what Claude reads and edits during a turn, and clears when it ends', async ($, on) => {
+  engine(on)
+  disk(on, { '/w/a.ts': 'a', '/w/b.ts': 'b', '/w/c.ts': 'c' })
+  on('tool.call', () => ({ result: 'ok' }))
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.turn.start({ turnId: 't1', text: 'hello' } as never)
+  await $.tool.call({ tool: 'Read', file_path: '/w/a.ts' } as never)
+  await $.tool.call({ tool: 'Read', file_path: '/w/b.ts' } as never)
+  await $.tool.call({ tool: 'Edit', file_path: '/w/b.ts', old_string: 'b', new_string: 'B' } as never)
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  const rows = (await explorerProps(ui)).rows as Array<{ label: string; activity: string | null }>
+  expect(rows.map(r => [r.label, r.activity])).toEqual([
+    ['a.ts', 'read'],
+    ['b.ts', 'edit'],
+    ['c.ts', null],
+  ])
+  await $.turn.complete({ turnId: 't1', answer: 'done', durationMs: 1, isAborted: false, reason: 'answer' })
+  const after = (await explorerProps(ui)).rows as Array<{ activity: string | null }>
+  expect(after.every(r => r.activity === null)).toBe(true)
   await ui.unmount()
 })
 

@@ -2,16 +2,31 @@
 // This module wires the engine's events to the modules that do the work.
 import type { EngineInterface, Register } from 'claude-code'
 import type { Agent, Entry } from '../types'
-import { usageToVitals } from './session/vitals'
+import { contextLevel, pushTurn, usageToVitals } from './session/vitals'
 import { describeTool, normalizeAgent, stepAgent } from './agents/agents'
 import { editMessage, enterEdit, leaveEdit, saveFile } from './explorer/editor/editing'
 import type { UiMessage } from './explorer/client'
-import { DEFAULT_EXPLORER, reduceKey, visibleEntries } from './explorer/model'
-import { loadDir, loadPreview, noteEdit, poll } from './explorer/files'
+import { DEFAULT_EXPLORER, reduceKey, selectLine, visibleEntries } from './explorer/model'
+import { loadDir, loadPreview, noteEdit, openDiff, poll } from './explorer/files'
 import { refreshGit } from './explorer/git/git'
 import { ONE_DARK, THEME, registerPane } from './pane'
 import { isAbsolute, parentOf, relTo, toSlash } from './shared/paths'
-import { PANE, getExplorer, logged, openPane, paneState, setExplorer, toKey, updateAgents, updateExplorer, updateTouched, updateVitals } from './state'
+import {
+  PANE,
+  getExplorer,
+  getVitals,
+  logged,
+  updateActivity,
+  openPane,
+  paneState,
+  setExplorer,
+  setPreview,
+  toKey,
+  updateAgents,
+  updateExplorer,
+  updateTouched,
+  updateVitals,
+} from './state'
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 
@@ -54,10 +69,42 @@ async function initExplorer($: EngineInterface, showHidden: boolean) {
   return loadDir($, '')
 }
 
+/** The context level last announced: each threshold toasts once on the way up, and a compaction resets it. */
+let announced: 0 | 1 | 2 = 0
+
+/** A toast as the context crosses 80% and 90%, and a status line under the prompt while it stays there. */
+function alarmContext($: EngineInterface, pct: number | null) {
+  const level = contextLevel(pct)
+  const n = Math.round(pct ?? 0)
+  if (level > announced) $.ui.toast(level === 2 ? `Context ${n}% full: run /compact soon` : `Context ${n}% full`)
+  if (level > 0) $.ui.status(level === 2 ? `⚠ context ${n}%: compact soon` : `⚠ context ${n}%`)
+  else if (announced > 0) $.ui.status(undefined)
+  announced = level
+}
+
 async function refreshUsage($: EngineInterface) {
   const u = await $.session.usage().catch(() => null)
   if (!u) return
   await updateVitals($, x => ({ ...x, ...usageToVitals(u) }))
+  alarmContext($, u.context?.percent ?? null)
+}
+
+/** The main loop's permission mode, from a classic hook's input; a subagent's events are left out. */
+async function noteMode($: EngineInterface, e: { permission_mode?: string; agent_id?: string }) {
+  const mode = e.permission_mode
+  if (!mode || e.agent_id) return
+  await updateVitals($, x => (x.mode === mode ? x : { ...x, mode })).catch(logged($, 'permission mode'))
+}
+
+/** Marks the file a Read or an edit tool is about to touch; an edit outranks a read for the rest of the turn. */
+async function noteActivity($: EngineInterface, e: { tool: string }) {
+  const kind = e.tool === 'Read' ? 'read' : EDIT_TOOLS.has(e.tool) ? 'edit' : null
+  if (!kind) return
+  const input = e as unknown as { file_path?: unknown; notebook_path?: unknown }
+  const given = typeof input.file_path === 'string' ? input.file_path : typeof input.notebook_path === 'string' ? input.notebook_path : null
+  if (!given) return
+  const path = relTo((await getExplorer($)).root, toSlash(given))
+  await updateActivity($, a => (a[path] === 'edit' || a[path] === kind ? a : { ...a, [path]: kind }))
 }
 
 async function refreshModel($: EngineInterface) {
@@ -92,10 +139,13 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'strackzdevhub',
-      description: 'STRACKZDEVHUB: open or close the hub, jump the explorer to a folder, or reset it',
-      argumentHint: '[close|cd <path>|save|reset]',
+      description: 'STRACKZDEVHUB: open or close the hub, jump the explorer to a folder, show the turns row, or reset it',
+      argumentHint: '[close|cd <path>|save|reset|turns [on|off]]',
     })
     await Promise.all([refreshUsage($), refreshModel($)]).catch(logged($, 'session vitals'))
+    // The turns row is off unless the person turned it on, in this session or an earlier one.
+    const showTurns = (await $.store.get('showTurns').catch(() => undefined)) === true
+    await updateVitals($, v => ({ ...v, showTurns })).catch(logged($, 'showTurns'))
     await initExplorer($, showHiddenDefault).catch(logged($, 'initExplorer'))
     if (options.openOnStart !== false) void openPane($).catch(logged($, 'openPane'))
     // Live refresh: edits made in another editor, git add/commit run elsewhere.
@@ -110,7 +160,10 @@ export const register: Register = (on, options) => {
   })
 
   on('session.end', async ($, e, next) => {
-    if (e.reason === 'clear') await updateAgents($, () => [])
+    if (e.reason === 'clear') {
+      await updateAgents($, () => [])
+      await updateActivity($, () => ({}))
+    }
     return next(e)
   })
 
@@ -122,8 +175,18 @@ export const register: Register = (on, options) => {
       paneState.isOpen = false
       return { text: 'STRACKZDEVHUB closed.' }
     }
+    if (verb === 'turns') {
+      // `turns` flips the row; `turns on` / `turns off` set it.
+      const arg = args.split(/\s+/)[1] ?? ''
+      const before = (await getVitals($)).showTurns
+      const showTurns = arg === 'on' ? true : arg === 'off' ? false : !before
+      await updateVitals($, v => ({ ...v, showTurns }))
+      await $.store.set('showTurns', showTurns).catch(logged($, 'showTurns'))
+      return { text: showTurns ? 'STRACKZDEVHUB: turns row on (cost and length of the last turns).' : 'STRACKZDEVHUB: turns row off.' }
+    }
     if (verb === 'reset') {
       await updateTouched($, () => ({}))
+      await updateActivity($, () => ({}))
       await updateAgents($, () => [])
       await setExplorer($, DEFAULT_EXPLORER)
       await initExplorer($, showHiddenDefault)
@@ -157,10 +220,22 @@ export const register: Register = (on, options) => {
     return { text: 'STRACKZDEVHUB open. Click the file list to give it the keyboard; Esc hands it back.' }
   })
 
+  // The engine raises nothing when the person switches mode (Shift+Tab), but every classic hook carries
+  // the mode: a prompt, each tool call, the end of a turn, and Claude waiting for the person.
   on('classic.UserPromptSubmit', async ($, e, next) => {
-    if (e.permission_mode) {
-      await updateVitals($, x => ({ ...x, mode: String(e.permission_mode) })).catch(logged($, 'permission mode'))
-    }
+    await noteMode($, e)
+    return next(e)
+  })
+  on('classic.PostToolUse', async ($, e, next) => {
+    await noteMode($, e)
+    return next(e)
+  })
+  on('classic.Stop', async ($, e, next) => {
+    await noteMode($, e)
+    return next(e)
+  })
+  on('classic.Notification', async ($, e, next) => {
+    await noteMode($, e)
     return next(e)
   })
 
@@ -199,15 +274,18 @@ export const register: Register = (on, options) => {
       return done
     }
     void refreshGit($).catch(logged($, 'refreshGit'))
+    await updateActivity($, () => ({})).catch(logged($, 'activity'))
     const [now, u] = await Promise.all([$.clock.now(), $.session.usage().catch(() => null)])
     await updateVitals($, v => {
       const cost = u?.cost?.usd ?? null
+      const turnCost = cost !== null && v.turnCostStart !== null ? cost - v.turnCostStart : null
       return {
         ...v,
         turnStartedAt: null,
         lastTurnMs: v.turnStartedAt === null ? v.lastTurnMs : now - v.turnStartedAt,
-        lastTurnCost: cost !== null && v.turnCostStart !== null ? cost - v.turnCostStart : v.lastTurnCost,
+        lastTurnCost: turnCost ?? v.lastTurnCost,
         costUsd: cost ?? v.costUsd,
+        turns: v.turnStartedAt === null ? v.turns : pushTurn(v.turns, { ms: now - v.turnStartedAt, cost: turnCost }),
       }
     })
     return done
@@ -215,6 +293,7 @@ export const register: Register = (on, options) => {
 
   on('session.measure', async ($, e, next) => {
     await updateVitals($, x => ({ ...x, ...usageToVitals(e) }))
+    alarmContext($, e.context?.percent ?? null)
     return next(e)
   })
 
@@ -233,6 +312,8 @@ export const register: Register = (on, options) => {
       const what = describeTool(e.tool, e as unknown as Record<string, unknown>)
       await updateAgents($, list => list.map(a => (a.id === id ? { ...a, tools: a.tools + 1, lastTool: what } : a))).catch(logged($, 'agent tool'))
     }
+    // The file tree colours a file while Claude reads or edits it: set as the call starts.
+    await noteActivity($, e).catch(logged($, 'activity'))
     const ran = await next(e)
     if (!EDIT_TOOLS.has(e.tool) || ran.deny !== undefined || ran.isError === true) return ran
     // Bookkeeping only: a failure here must never change the call's result.
@@ -251,6 +332,11 @@ export const register: Register = (on, options) => {
     }
     if (d.k === 'mode') {
       if (ex.preview) await enterEdit($)
+      return {}
+    }
+    if (d.k === 'line' && typeof d.row === 'number' && ex.preview && !ex.preview.diff) {
+      const line = ex.preview.top + d.row
+      await setPreview($, p => selectLine(p, line, d.isExtend === true))
       return {}
     }
     if (d.k === 'click' && typeof d.index === 'number') {
@@ -273,6 +359,7 @@ export const register: Register = (on, options) => {
     else if (effect?.kind === 'edit') await enterEdit($)
     else if (effect?.kind === 'up') await goUp($)
     else if (effect?.kind === 'mention') await mention($, effect.path)
+    else if (effect?.kind === 'diff') await openDiff($)
     else if (effect?.kind === 'reload') await (nextEx.preview ? refreshGit($) : loadDir($, nextEx.dir))
     return {}
   })

@@ -1,6 +1,7 @@
 // The explorer's surface module: draws what the hooks module hands it and posts keys and clicks back.
 // It holds no explorer state of its own; a click inside gives it the keyboard, Esc hands it back.
 import type { ClientModule } from 'claude-code'
+import type { DiffRow } from '../../types'
 
 export type GitLetter = { letter: string; tone: 'staged' | 'modified' | 'untracked' | 'deleted' | 'conflict' }
 
@@ -11,6 +12,8 @@ export type Row = {
   isDir: boolean
   isTouched: boolean
   isSelected: boolean
+  /** What Claude is doing with the file (or something under the folder) this turn. */
+  activity: 'read' | 'edit' | null
   /** The file's git status letter, or a dot on a folder holding changes. */
   git: GitLetter | null
 }
@@ -42,6 +45,7 @@ export type UiMessage =
   | { k: 'mode' | 'crumb'; room: number }
   | { k: 'place'; row: number; vis: number; room: number }
   | { k: 'click'; index: number; room: number }
+  | { k: 'line'; row: number; isExtend: boolean; room: number }
 
 export type ExplorerProps = {
   mode: 'list' | 'preview'
@@ -73,6 +77,10 @@ export type ExplorerProps = {
   markdown: string | null
   /** The editor's window: display lines (tabs expanded), the cursor in it, the gutter and text widths. */
   edit: EditView | null
+  /** The picked lines, first and last, 1-based; null when none. */
+  selection: [number, number] | null
+  /** The diff view's rows in view: hunk headers, shared lines, removed and added lines. */
+  diff: DiffRow[] | null
 }
 
 export type EditView = {
@@ -85,7 +93,8 @@ export type EditView = {
   textW: number
 }
 
-type Ref = { props: ExplorerProps }
+/** The props as last drawn, and the line a drag last reached (so a drag posts once per line). */
+type Ref = { props: ExplorerProps; dragRow?: number | null }
 type State = { ref: Ref }
 
 /** Rows above the list: the breadcrumb and a rule. */
@@ -134,6 +143,8 @@ function complete(raw: Partial<ExplorerProps> | null | undefined): ExplorerProps
     changes: p.changes && typeof p.changes.added === 'number' ? p.changes : null,
     markdown: typeof p.markdown === 'string' ? p.markdown : null,
     edit: p.edit && Array.isArray(p.edit.lines) ? p.edit : null,
+    diff: Array.isArray(p.diff) ? p.diff : null,
+    selection: Array.isArray(p.selection) && p.selection.length === 2 ? p.selection : null,
   }
 }
 
@@ -150,8 +161,19 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
       post({ k: 'key', key: k.key, ctrl: k.ctrl ?? false, meta: k.meta ?? false, room: ref.props.room })
     })
     surface.onPointer(p => {
-      if (p.type !== 'down' || p.button !== 'left') return
       const cur = ref.props
+      // In the file view, a press picks a line and a drag (or shift+click) stretches the pick.
+      const codeRow = p.y - HEAD - (cur.note ? 1 : 0)
+      const isOnCode = cur.code !== null && !cur.edit && codeRow >= 0 && codeRow < cur.code.source.split('\n').length
+      if (p.type === 'move' && p.button === 'left') {
+        if (isOnCode && codeRow !== ref.dragRow) {
+          ref.dragRow = codeRow
+          post({ k: 'line', row: codeRow, isExtend: true, room: cur.room })
+        }
+        return
+      }
+      if (p.type !== 'down' || p.button !== 'left') return
+      ref.dragRow = null
       // The mode label toggles view and edit; the rest of the breadcrumb goes back.
       const label = cur.label ?? ''
       if (p.y === 0 && label && p.x >= Math.max(10, cur.width) - label.length) return post({ k: 'mode', room: cur.room })
@@ -161,6 +183,10 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
         if (row < 0 || row >= cur.edit.lines.length) return
         const vis = p.x - cur.edit.gutterW - 4 + (row === cur.edit.cursorRow ? cur.edit.hoff : 0)
         return post({ k: 'place', row, vis, room: cur.room })
+      }
+      if (isOnCode) {
+        ref.dragRow = codeRow
+        return post({ k: 'line', row: codeRow, isExtend: p.shift === true, room: cur.room })
       }
       const i = p.y - HEAD
       if (cur.mode === 'list' && i >= 0 && i < cur.rows.length) post({ k: 'click', index: cur.top + i, room: cur.room })
@@ -231,21 +257,35 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
       ) : null}
       {props.rows.map((r, i) => {
         const bg = r.isSelected ? c.selectedBg : undefined
-        // As in VS Code: a changed file's name takes its git colour.
-        const nameColor = r.git && r.git.letter !== '•' ? letterColor(r.git.tone) : r.isDir ? c.dir : r.isTouched ? c.touched : c.text
+        // What Claude does this turn comes first (yellow while it edits, purple while it reads); then, as in
+        // VS Code, a changed file's name takes its git colour.
+        const actColor = r.activity === 'edit' ? c.touched : r.activity === 'read' ? c.purple : null
+        const nameColor = actColor ?? (r.git && r.git.letter !== '•' ? letterColor(r.git.tone) : r.isDir ? c.dir : r.isTouched ? c.touched : c.text)
+        const icon = r.activity === 'edit' ? '✎' : r.activity === 'read' ? '◉' : r.isTouched ? '✎' : r.icon
         return (
           <Box key={`row${i}`} flexDirection="row" width={W}>
             <Text backgroundColor={bg} color={r.isSelected ? c.accent : c.dim} hover={{ backgroundColor: c.hoverBg }}>
               {r.isSelected ? '▌' : ' '}
             </Text>
-            <Text backgroundColor={bg} color={r.isTouched ? c.touched : r.isDir ? c.dir : c.dim} hover={{ backgroundColor: c.hoverBg }}>
-              {`${r.isTouched ? '✎' : r.icon} `}
+            <Text
+              backgroundColor={bg}
+              color={actColor ?? (r.isTouched ? c.touched : r.isDir ? c.dir : c.dim)}
+              bold={actColor !== null}
+              hover={{ backgroundColor: c.hoverBg }}
+            >
+              {`${icon} `}
             </Text>
             <Text backgroundColor={bg} color={r.git ? letterColor(r.git.tone) : c.dim} bold hover={{ backgroundColor: c.hoverBg }}>
               {`${r.git?.letter ?? ' '} `}
             </Text>
             <Box width={nameW}>
-              <Text backgroundColor={bg} color={nameColor} bold={r.isSelected || r.isDir} wrap="truncate-end" hover={{ backgroundColor: c.hoverBg }}>
+              <Text
+                backgroundColor={bg}
+                color={nameColor}
+                bold={r.isSelected || r.isDir || actColor !== null}
+                wrap="truncate-end"
+                hover={{ backgroundColor: c.hoverBg }}
+              >
                 {r.label.padEnd(nameW)}
               </Text>
             </Box>
@@ -304,6 +344,30 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
     </Box>
   ) : null
 
+  const isPicked = (line: number) => props.selection !== null && line >= props.selection[0] && line <= props.selection[1]
+
+  // The diff view: the new line's number (the old one's on a removed line), a +/- mark, the text.
+  const diffNumW = Math.max(3, ...(props.diff ?? []).map(r => String(r.new ?? r.old ?? '').length))
+  const diffView = props.diff ? (
+    <Box flexDirection="column">
+      {props.diff.map(r =>
+        r.kind === 'hunk' ? (
+          <Text color={c.accent} dimColor wrap="truncate-end">
+            {r.text}
+          </Text>
+        ) : (
+          <Text wrap="truncate-end">
+            <Text color={c.dim}>{`${String(r.new ?? r.old ?? '').padStart(diffNumW)} `}</Text>
+            <Text color={r.kind === 'add' ? c.ok : r.kind === 'del' ? c.bad : c.dim} bold>
+              {r.kind === 'add' ? '+' : r.kind === 'del' ? '−' : ' '}
+            </Text>
+            <Text color={r.kind === 'add' ? c.ok : r.kind === 'del' ? c.bad : c.text}>{` ${r.text || ' '}`}</Text>
+          </Text>
+        ),
+      )}
+    </Box>
+  ) : null
+
   const numW = Math.max(3, String((props.code?.startLine ?? 1) + Math.max(0, (props.code?.source.split('\n').length ?? 1) - 1)).length)
   const preview = (
     <Box flexDirection="column" height={props.room}>
@@ -313,6 +377,7 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
         </Text>
       ) : null}
       {editor}
+      {diffView}
       {props.markdown !== null ? (
         <Box flexDirection="column" width={W} height={Math.max(1, props.room - (props.note ? 1 : 0))} overflow="hidden">
           <Markdown text={props.markdown || ' '} />
@@ -324,10 +389,14 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
             {props.code.source.split('\n').map((_, i) => (
               <Text>
                 {markAt(i)}
-                <Text color={numberColor(i) ?? c.dim} bold={numberColor(i) !== undefined}>
+                <Text
+                  color={isPicked((props.code?.startLine ?? 1) + i) ? c.accent : (numberColor(i) ?? c.dim)}
+                  backgroundColor={isPicked((props.code?.startLine ?? 1) + i) ? c.selectedBg : undefined}
+                  bold={isPicked((props.code?.startLine ?? 1) + i) || numberColor(i) !== undefined}
+                >
                   {String((props.code?.startLine ?? 1) + i).padStart(numW)}
                 </Text>
-                <Text color={c.dim}>{' │'}</Text>
+                <Text color={isPicked((props.code?.startLine ?? 1) + i) ? c.accent : c.dim}>{isPicked((props.code?.startLine ?? 1) + i) ? ' ┃' : ' │'}</Text>
               </Text>
             ))}
           </Box>

@@ -1,8 +1,8 @@
 // Pure logic for STRACKZDEVHUB: the props the explorer client draws, from the stored state. No `$` here, so it is testable.
-import type { Explorer } from '../../types'
+import type { Activity, Entry, Explorer } from '../../types'
 import { displayOf, visualCol } from './editor/editor'
 import type { ExplorerProps, GutterMark, Hint, Palette } from './client'
-import { MAX_DRAWN, visibleEntries, windowTop } from './model'
+import { MAX_DRAWN, selRange, visibleEntries, windowTop } from './model'
 import { clipEnd, fmtAge, fmtSize } from '../shared/format'
 import type { Base } from './git/git'
 import type { LineMark } from './git/gitdiff'
@@ -24,6 +24,8 @@ function gutterMark(m: LineMark): GutterMark | null {
 export function explorerProps(o: {
   ex: Explorer
   touched: Record<string, number>
+  /** What Claude does with each file this turn. */
+  activity: Record<string, Activity>
   now: number
   room: number
   width: number
@@ -32,10 +34,20 @@ export function explorerProps(o: {
   disk: readonly string[] | null
 }): ExplorerProps {
   const { ex, now, room, base, colors: C, touched: t, width: inner } = o
+  const act = o.activity
+  // A folder shows the strongest activity under it: an edit over a read.
+  const activityOf = (e: Entry): Activity | null => {
+    if (e.kind !== 'dir') return act[e.path] ?? null
+    const under = Object.entries(act).filter(([p]) => p.startsWith(`${e.path}/`))
+    return under.some(([, k]) => k === 'edit') ? 'edit' : under.length ? 'read' : null
+  }
   const rows = visibleEntries(ex)
   const rootName = baseName(ex.root) || '/'
   const crumbs = ex.onlyTouched ? [rootName, '✎ touched'] : [rootName, ...(ex.dir ? ex.dir.split('/') : [])]
-  const touchedN = Object.keys(t).length
+  // Inside a repository, touched means what git reports changed now; outside git, the files Claude edited.
+  const repo = ex.repo ?? null
+  const touchedN = repo ? repo.changedFiles.length : Object.keys(t).length
+  const isTouched = (e: Entry) => (repo ? Boolean(e.git && e.git !== '•') : (t[e.path] ?? 0) > 0)
   let props: ExplorerProps
 
   if (ex.preview) {
@@ -58,11 +70,13 @@ export function explorerProps(o: {
           ]
         : [
             ...(p.readOnly ? [] : [{ key: 'e', label: 'edit' }]),
+            { key: 'd', label: 'diff' },
             ...(p.kind === 'markdown' ? [{ key: 'm', label: p.mdView === 'source' ? 'rendered' : 'source' }] : []),
             { key: '↑↓', label: 'scroll' },
             { key: 'PgUp/Dn', label: 'page' },
             { key: 'g/G', label: 'top/end' },
-            { key: '@', label: 'mention' },
+            { key: '@', label: p.sel ? `mention ${selRange(p.sel)[0] + 1}–${selRange(p.sel)[1] + 1}` : 'mention' },
+            { key: 'click', label: p.sel ? 'clear' : 'pick lines' },
             { key: '⌫', label: 'back' },
           ]
     const isRendered = !isEdit && p.kind === 'markdown' && p.mdView !== 'source'
@@ -121,8 +135,30 @@ export function explorerProps(o: {
       gutter: isRendered ? null : gutter,
       changes,
       edit,
+      diff: null,
+      selection: p.sel && !isEdit ? [selRange(p.sel)[0] + 1, selRange(p.sel)[1] + 1] : null,
     }
     // A picture's size sits bottom right, like a file's line count; the note line is kept for problems.
+    // The diff view (d) draws its rows in the code's place.
+    if (p.diff) {
+      const rows = p.diff.rows
+      const dEnd = Math.min(rows.length, p.top + codeRoom)
+      props = {
+        ...props,
+        crumbs: [rootName, ...p.path.split('/').slice(0, -1), `${baseName(p.path)} · diff`],
+        counter: `${p.top + 1}–${dEnd} / ${rows.length}`,
+        hints: [
+          { key: '↑↓', label: 'scroll' },
+          { key: 'PgUp/Dn', label: 'page' },
+          { key: 'd', label: 'back to file' },
+          { key: '@', label: 'mention' },
+        ],
+        code: null,
+        markdown: null,
+        gutter: null,
+        diff: rows.slice(p.top, dEnd),
+      }
+    }
     if (p.kind === 'image') {
       props = {
         ...props,
@@ -159,9 +195,10 @@ export function explorerProps(o: {
       rows: rows.slice(top, top + room).map((r, i) => ({
         icon: r.kind === 'dir' ? '▸' : '·',
         label: r.kind === 'dir' ? `${r.name}/` : r.name,
-        meta: ex.onlyTouched ? `${t[r.path] ?? 0} edits` : r.kind === 'dir' ? '' : `${fmtSize(r.size)} · ${fmtAge(now - r.mtimeMs)}`,
+        meta: ex.onlyTouched && !repo ? `${t[r.path] ?? 0} edits` : r.kind === 'dir' ? '' : `${fmtSize(r.size)} · ${fmtAge(now - r.mtimeMs)}`,
         isDir: r.kind === 'dir',
-        isTouched: (t[r.path] ?? 0) > 0,
+        isTouched: isTouched(r),
+        activity: activityOf(r),
         isSelected: top + i === cursor,
         git: r.git === '•' ? { letter: '•', tone: 'modified' as const } : r.git ? statusLetter(r.git) : null,
       })),
@@ -180,11 +217,19 @@ export function explorerProps(o: {
       changes: null,
       markdown: null,
       edit: null,
+      diff: null,
+      selection: null,
       empty:
         rows.length > 0
           ? null
           : (ex.error ??
-            (rows.length === 0 ? (ex.onlyTouched ? 'No files touched yet this session.' : ex.filter ? 'Nothing matches the filter.' : 'Empty folder.') : null)),
+            (ex.onlyTouched
+              ? repo
+                ? 'Nothing changed: the files match the last commit.'
+                : 'No files touched yet this session.'
+              : ex.filter
+                ? 'Nothing matches the filter.'
+                : 'Empty folder.')),
       colors: C,
     }
   }

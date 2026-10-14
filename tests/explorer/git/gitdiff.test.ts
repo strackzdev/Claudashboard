@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { countStatus, diffLines, lineMarks, parseBranch, parsePorcelain, statusLetter } from '../../../hooks/explorer/git/gitdiff'
+import { changedUnder, diffRows, countStatus, diffLines, lineMarks, parseBranch, parsePorcelain, statusLetter } from '../../../hooks/explorer/git/gitdiff'
 
 test('a line diff tells added, modified and deleted lines apart', () => {
   const d = diffLines(['a', 'b', 'c', 'd'], ['a', 'B', 'c', 'x', 'd'])
@@ -40,4 +40,40 @@ test('the project bar reads the branch, ahead/behind and counts', () => {
   const st = parsePorcelain(out)
   expect(st.has('main...origin/main [ahead 9, behind 8]')).toBe(false)
   expect(countStatus(st)).toEqual({ changed: 3, staged: 2 })
+})
+
+test('touched files from git status: paths from the root, deleted files and files outside the root left out', () => {
+  const status = new Map([
+    ['app/src/a.ts', ' M'],
+    ['app/new.ts', '??'],
+    ['app/gone.ts', ' D'],
+    ['docs/readme.md', 'M '],
+  ])
+  expect(changedUnder('/repo/app', '/repo', status)).toEqual(['src/a.ts', 'new.ts'])
+  expect(changedUnder('/repo', '/repo', status)).toEqual(['app/src/a.ts', 'app/new.ts', 'docs/readme.md'])
+})
+
+test('the diff view: hunks with three lines of context, headers as git writes them', () => {
+  const a = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
+  const b = ['1', '2', '3', '4', 'five', '6', '7', '8', '9', '10', '11', '12', '13']
+  const rows = diffRows(a, b)
+  expect(rows.map(r => `${r.kind[0]} ${r.text}`)).toEqual([
+    'h @@ -2,7 +2,7 @@',
+    'c 2',
+    'c 3',
+    'c 4',
+    'd 5',
+    'a five',
+    'c 6',
+    'c 7',
+    'c 8',
+    'h @@ -10,3 +10,4 @@',
+    'c 10',
+    'c 11',
+    'c 12',
+    'a 13',
+  ])
+  expect(rows.find(r => r.kind === 'add')).toEqual({ kind: 'add', text: 'five', old: null, new: 5 })
+  expect(diffRows(a, a)).toEqual([])
+  expect(diffRows([], ['x']).map(r => r.text)).toEqual(['@@ -0,0 +1,1 @@', 'x'])
 })

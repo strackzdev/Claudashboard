@@ -8,7 +8,7 @@ The engine lists which `$.state` values a mod reads and writes by scanning the s
 
 ## Decision
 
-`hooks/state.ts` declares the atoms (`vitals`, `explorer`, `touched`, `agents`, `gitTick`) and is the only file that calls `read` or `update`. It exports helpers for every access the other modules need: `getExplorer`, `updateExplorer`, `setPreview`, `setExplorer`, `updateVitals`, `updateAgents`, `updateTouched`, `bumpGitTick`, `readGitTick`, ….
+`hooks/state.ts` declares the atoms (`vitals`, `explorer`, `touched`, `agents`, `activity`, `gitTick`) and is the only file that calls `read` or `update`. It exports helpers for every access the other modules need: `getExplorer`, `updateExplorer`, `setPreview`, `setExplorer`, `updateVitals`, `updateAgents`, `updateTouched`, `bumpGitTick`, `readGitTick`, ….
 
 ## Consequences
 

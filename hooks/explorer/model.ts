@@ -64,6 +64,8 @@ export function emptyPreview(path: string, over: Partial<Preview> = {}): Preview
     kind: 'text',
     mdView: 'rendered',
     image: null,
+    diff: null,
+    sel: null,
     ...over,
   }
 }
@@ -96,7 +98,13 @@ export function previewOf(path: string, text: string, size: number, mtimeMs = 0)
 }
 
 export type Effect =
-  { kind: 'open'; entry: Entry; edit?: true } | { kind: 'edit' } | { kind: 'up' } | { kind: 'mention'; path: string } | { kind: 'reload' } | null
+  | { kind: 'open'; entry: Entry; edit?: true }
+  | { kind: 'edit' }
+  | { kind: 'up' }
+  | { kind: 'mention'; path: string }
+  | { kind: 'reload' }
+  | { kind: 'diff' }
+  | null
 
 export type Key = { key: string; ctrl?: true; meta?: true; shift?: true }
 
@@ -107,6 +115,25 @@ export type Key = { key: string; ctrl?: true; meta?: true; shift?: true }
 export function reduceKey(ex: Explorer, k: Key, room: number): { ex: Explorer; effect: Effect } {
   const page = Math.max(1, room - 1)
   const key = k.key
+
+  if (ex.preview?.diff) {
+    const p = ex.preview
+    const d = ex.preview.diff
+    const last = Math.max(0, d.rows.length - (hasNoteRow(p) ? room - 1 : room))
+    const scroll = (top: number) => ({ ex: { ...ex, preview: { ...p, top: clamp(top, 0, last) } }, effect: null })
+    // Back to the file where it was scrolled.
+    if (key === 'd' || key === 'backspace' || key === 'left' || key === 'h' || key === 'q') {
+      return { ex: { ...ex, preview: { ...p, diff: null, top: d.fileTop } }, effect: null }
+    }
+    if (key === 'down' || key === 'j') return scroll(p.top + 1)
+    if (key === 'up' || key === 'k') return scroll(p.top - 1)
+    if (key === 'pagedown' || key === 'space' || key === ' ') return scroll(p.top + page)
+    if (key === 'pageup') return scroll(p.top - page)
+    if (key === 'home' || key === 'g') return scroll(0)
+    if (key === 'end' || key === 'G') return scroll(last)
+    if (key === '@') return { ex, effect: { kind: 'mention', path: p.path } }
+    return { ex, effect: null }
+  }
 
   if (ex.preview) {
     const p = ex.preview
@@ -120,9 +147,10 @@ export function reduceKey(ex: Explorer, k: Key, room: number): { ex: Explorer; e
     if (key === 'pageup') return scroll(p.top - page)
     if (key === 'home' || key === 'g') return scroll(0)
     if (key === 'end' || key === 'G') return scroll(last)
-    if (key === '@') return { ex, effect: { kind: 'mention', path: p.path } }
+    if (key === '@') return { ex, effect: { kind: 'mention', path: mentionOf(p.path, p.sel ?? null) } }
     if (key === 'e') return { ex, effect: { kind: 'edit' } }
     if (key === 'r') return { ex, effect: { kind: 'reload' } }
+    if (key === 'd' && p.kind !== 'image') return { ex, effect: { kind: 'diff' } }
     if (key === 'm' && p.kind === 'markdown') {
       return { ex: { ...ex, preview: { ...p, mdView: p.mdView === 'source' ? 'rendered' : 'source' } }, effect: null }
     }
@@ -172,4 +200,31 @@ export function touchedEntries(touched: Record<string, number>): Entry[] {
   return Object.entries(touched)
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([path]) => ({ name: path, path, kind: 'file' as const, size: 0, mtimeMs: 0 }))
+}
+
+type Selection = { anchor: number; head: number }
+
+/** The selected lines, first and last, 0-based. */
+export const selRange = (s: Selection): [number, number] => [Math.min(s.anchor, s.head), Math.max(s.anchor, s.head)]
+
+/**
+ * A click on line `line` of the view: select it, or with `isExtend` (shift+click, a drag) stretch the
+ * selection to it from where it started. Clicking the one selected line again clears it.
+ */
+export function selectLine(p: Preview, line: number, isExtend: boolean): Preview {
+  const at = clamp(line, 0, Math.max(0, p.lines.length - 1))
+  const s = p.sel ?? null
+  if (isExtend && s) return { ...p, sel: { anchor: s.anchor, head: at } }
+  if (s && s.anchor === at && s.head === at) return { ...p, sel: null }
+  return { ...p, sel: { anchor: at, head: at } }
+}
+
+/**
+ * What `@` puts in the prompt: the file, and the selected lines when there are some, in the form Claude
+ * Code's own editor extension inserts for a selection (`src/a.ts#10-20`, one line as `#7-7`).
+ */
+export function mentionOf(path: string, sel: Selection | null): string {
+  if (!sel) return path
+  const [a, b] = selRange(sel)
+  return `${path}#${a + 1}-${b + 1}`
 }

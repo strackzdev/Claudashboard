@@ -7,7 +7,18 @@ import type { Explorer } from '../../types'
 
 const colors = {} as Palette
 const props = (ex: Partial<Explorer>, over: Partial<Parameters<typeof explorerProps>[0]> = {}) =>
-  explorerProps({ ex: { ...DEFAULT_EXPLORER, root: '/p', ...ex }, touched: {}, now: 0, room: 10, width: 70, colors, base: null, disk: null, ...over })
+  explorerProps({
+    ex: { ...DEFAULT_EXPLORER, root: '/p', ...ex },
+    touched: {},
+    activity: {},
+    now: 0,
+    room: 10,
+    width: 70,
+    colors,
+    base: null,
+    disk: null,
+    ...over,
+  })
 
 test('the list: a row per visible entry, the cursor counted, touched files marked', () => {
   const entries = [
@@ -49,4 +60,35 @@ test('editing shows the cursor position; a picture shows its size', () => {
   const pic = props({ preview: emptyPreview('a.png', { kind: 'image', image: { file: '/p/a.png', width: 640, height: 480 } }) })
   expect(pic.counter).toBe('640×480 px')
   expect(pic.fileMode).toBe(null)
+})
+
+test('inside a repo, touched is what git reports changed, not what Claude edited', () => {
+  const repo = { name: 'p', branch: 'main', ahead: 0, behind: 0, changed: 1, staged: 0, changedFiles: ['a.ts'] }
+  const entries = [
+    { name: 'a.ts', path: 'a.ts', kind: 'file' as const, size: 10, mtimeMs: 0, git: ' M' },
+    { name: 'b.ts', path: 'b.ts', kind: 'file' as const, size: 10, mtimeMs: 0 },
+  ]
+  const p = props({ entries, repo }, { touched: { 'b.ts': 3 } })
+  expect(p.rows.map(r => [r.label, r.isTouched])).toEqual([
+    ['a.ts', true],
+    ['b.ts', false],
+  ])
+  expect(p.hints.find(h => h.key === 't')?.label).toBe('touched (1)')
+  expect(props({ onlyTouched: true, repo: { ...repo, changedFiles: [] } }).empty).toBe('Nothing changed: the files match the last commit.')
+})
+
+test("this turn's activity: a file Claude reads or edits, and a folder holding one, carry it", () => {
+  const entries = [
+    { name: 'src', path: 'src', kind: 'dir' as const, size: 0, mtimeMs: 0 },
+    { name: 'docs', path: 'docs', kind: 'dir' as const, size: 0, mtimeMs: 0 },
+    { name: 'a.ts', path: 'a.ts', kind: 'file' as const, size: 1, mtimeMs: 0 },
+    { name: 'b.ts', path: 'b.ts', kind: 'file' as const, size: 1, mtimeMs: 0 },
+  ]
+  const p = props({ entries }, { activity: { 'a.ts': 'read', 'src/x.ts': 'read', 'src/y.ts': 'edit', 'docs/r.md': 'read' } })
+  expect(p.rows.map(r => [r.label, r.activity])).toEqual([
+    ['src/', 'edit'],
+    ['docs/', 'read'],
+    ['a.ts', 'read'],
+    ['b.ts', null],
+  ])
 })

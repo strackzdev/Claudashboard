@@ -1,8 +1,9 @@
 // The explorer's I/O: folder listings, the preview's file, and the live refresh.
 import type { EngineInterface } from 'claude-code'
-import type { Entry, Explorer, Preview } from '../../types'
+import type { Entry, Explorer, Preview, RepoInfo } from '../../types'
 import { MAX_PREVIEW_BYTES, emptyPreview, previewOf, sortEntries, touchedEntries, visibleEntries } from './model'
-import { bases, fetchBase, gitStatusOf, opened } from './git/git'
+import { bases, fetchBase, gitStatusOf, opened, repoStatus, withGit } from './git/git'
+import { diffRows } from './git/gitdiff'
 import { kindOf } from './media/media'
 import { joinPath, parentOf, relTo, toSlash } from '../shared/paths'
 import { loadPicture } from './media/picture'
@@ -34,10 +35,9 @@ export async function poll($: EngineInterface) {
       if (changedOnDisk(st, p)) await reloadChanged($, p, false)
       await fetchBase($, ex.root, p.path)
     }
-    if (ex.onlyTouched) return
-    const listed = await listDir($, ex.root, ex.dir).catch(() => null)
-    if (!listed) return
-    const { entries, repo } = await gitStatusOf($, ex.root, ex.dir, listed)
+    const listing = await listingOf($, ex, ex.dir).catch(() => null)
+    if (!listing) return
+    const { entries, repo } = listing
     const sameRepo = JSON.stringify(repo ?? null) === JSON.stringify(ex.repo ?? null)
     if (sameRepo && sameListing(entries, ex.entries)) return
     await updateExplorer($, cur => {
@@ -72,12 +72,32 @@ async function listDir($: EngineInterface, root: string, dir: string): Promise<E
   return sortEntries(entries)
 }
 
+/**
+ * What the explorer lists, with git's letters: the folder `dir`, or the touched view. Inside a repository
+ * the touched view is what git reports changed, so a reverted file leaves it; outside git, the files Claude edited.
+ */
+async function listingOf($: EngineInterface, ex: Explorer, dir: string): Promise<{ entries: Entry[]; repo: RepoInfo | null }> {
+  if (!ex.onlyTouched) {
+    const listed = await listDir($, ex.root, dir)
+    return gitStatusOf($, ex.root, dir, listed).catch(() => ({ entries: listed, repo: null }))
+  }
+  const s = await repoStatus($, ex.root, '')
+  if (!s) return { entries: touchedEntries(await getTouched($)), repo: null }
+  // ponytail: one stat per changed file each poll; cap it if a repo without a .gitignore lists thousands.
+  const entries = await Promise.all(
+    s.repo.changedFiles.map(async path => {
+      const st = await $.fs.stat(absOf(ex.root, path)).catch(() => null)
+      return { name: path, path, kind: 'file' as const, size: st?.size ?? 0, mtimeMs: st?.mtimeMs ?? 0 }
+    }),
+  )
+  return { entries: withGit(entries, s, ex.root), repo: s.repo }
+}
+
 /** Loads `dir` into the explorer, the cursor on `select` when it is there. */
 export async function loadDir($: EngineInterface, dir: string, select?: string) {
   const ex = await getExplorer($)
   try {
-    const listed = ex.onlyTouched ? touchedEntries(await getTouched($)) : await listDir($, ex.root, dir)
-    const { entries, repo } = await gitStatusOf($, ex.root, dir, listed).catch(() => ({ entries: listed, repo: null }))
+    const { entries, repo } = await listingOf($, ex, dir)
     await updateExplorer($, x => {
       const next: Explorer = { ...x, dir, entries, repo, preview: null, error: null, cursor: 0 }
       const at = select ? visibleEntries(next).findIndex(e => e.path === select) : -1
@@ -151,4 +171,19 @@ export async function noteEdit($: EngineInterface, e: unknown) {
   // A new file in the folder on screen shows without a manual refresh.
   if (!ex.preview && !ex.onlyTouched && parentOf(path) === ex.dir && !ex.entries.some(x => x.path === path)) await loadDir($, ex.dir)
   if (ex.onlyTouched) await loadDir($, ex.dir)
+}
+
+/** The diff view of the file in the preview: its text against git's HEAD, or outside git the text as first opened. */
+export async function openDiff($: EngineInterface) {
+  const ex = await getExplorer($)
+  const p = ex.preview
+  if (!p) return
+  const base = bases.get(p.path)
+  if (!base) {
+    void fetchBase($, ex.root, p.path).catch(logged($, 'fetchBase'))
+    return setPreview($, x => ({ ...x, status: "reading git's copy of the file: press d again in a moment" }))
+  }
+  const rows = diffRows(base.head, p.lines)
+  if (rows.length === 0) return setPreview($, x => ({ ...x, status: base.repo ? 'no changes since the last commit' : 'no changes since the file was opened' }))
+  await setPreview($, x => ({ ...x, diff: { rows, fileTop: x.top }, top: 0, status: null }))
 }

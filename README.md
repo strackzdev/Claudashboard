@@ -1,8 +1,8 @@
 # Claudashboard
 
-**A clean hub pane for Claude Code.** It shows the session's vitals, the subagents that are working right now, and a file explorer you drive with the mouse or the keyboard, with a syntax-highlighted preview and a small editor inside the pane.
+**A clean hub pane for Claude Code.** It shows the session's vitals, the subagents (running and finished), and a file explorer you drive with the mouse or the keyboard, with a syntax-highlighted preview and a small editor inside the pane.
 
-![Claudashboard's basic view: the session box with the turns row, one subagent running, and the explorer on a clean git repository](docs/images/basic-view.png)
+![Claudashboard's files tab: the session box with the turns row, the project bar beside the tabs, and the explorer listing a git repository with its changed files marked](docs/images/files-tab.png)
 
 Every number comes from real session events. Nothing leaves your machine.
 
@@ -49,14 +49,23 @@ claude --plugin-dir ./Claudashboard
 | **Limits** | The 5-hour and 7-day rate-limit windows, when your plan reports them. |
 | **Turns** | Off by default; `/claudashboard turns` shows it (remembered across sessions). `12 turns  cost ▁▃█▂ $0.21 (avg $0.11)   time ▂▅▁▃ 0:20 (avg 0:14)`: one bar per turn, oldest left and latest right (up to 16), each followed by the latest turn's value and the average. |
 
+### Tabs
+
+Below the session box, two tabs sit on the top right edge of the box: **FILES** and **AGENTS**. Click a tab, or press `Tab` while the pane has the keyboard (in edit mode and while typing a filter, `Tab` types; click the tab instead). `/claudashboard agents` and `/claudashboard files` switch from the prompt. While subagents run, the agents tab shows how many: `⠹ AGENTS (2)`, its spinner turning while they work. On the files tab inside a git repository, the project bar sits left of the tabs: `⎇ claudashboard on main ↑2 ↓1  3 changed · 1 staged` (or `✓ clean`). The agents tab leaves it out.
+
+Press `?` on either tab for every key, the current view's first. Arrows scroll the help; any other key closes it. The hint line under each view only shows the main keys.
+
 ### Agents
-This section appears only while subagents run. Each running agent gets a card showing:
+
+![Claudashboard's agents tab: two subagents running with their task, current tool and timer, and one finished agent in the history](docs/images/agents-tab.png)
+
+**Running:** each agent gets a card showing:
 - its name, type and model
 - steps, tool calls, the context it's using and a live timer
 - its task (`↳`)
 - the tool it's running right now (`⟶`), such as `Read middleware.ts` or `$ npm test`
 
-A card disappears when its agent finishes. Up to 4 cards are shown, then `+n more`.
+**Finished:** when an agent ends, it moves to the history below, newest first, on one line: name, type, model, steps, tools, context, task and how long it ran. The last 20 are kept. `c` clears them. `↑` `↓` and `PgUp` `PgDn` scroll the tab.
 
 ### Files
 The explorer starts at the session's working directory.
@@ -74,6 +83,7 @@ The explorer starts at the session's working directory.
 | `⏎` `→` `l` | open | — |
 | `⌫` `←` `h` | parent folder (clears a filter first) | back to the list (`q` too) |
 | `/` | filter by name as you type (`⏎` or `Tab` to finish) | — |
+| `f` / `ctrl+p` | find a file anywhere (see below) | find a file anywhere |
 | `.` | show / hide dotfiles | — |
 | `m` | — | Markdown: rendered ↔ source |
 | `t` | only touched files: in a git repository, what `git status` reports changed; elsewhere, what Claude edited this session | — |
@@ -82,6 +92,14 @@ The explorer starts at the session's working directory.
 | click, shift+click, drag | — | pick lines; `@` then mentions just them (`@src/a.ts#10-20`) |
 | `@` | insert `@path` into your prompt | insert `@path` (with the picked lines, if any) into your prompt |
 | `e` | open the file straight into edit mode | switch to edit mode |
+| `Tab` | agents tab | agents tab |
+| `?` | help | help |
+
+### Finding a file
+
+`f` (or `ctrl+p`) opens a fuzzy finder over every file under the working directory: in a git repository, what git tracks plus untracked files that aren't ignored; elsewhere, a walk of the folders that skips `node_modules`, `.git`, build outputs and (unless dotfiles show) dotfolders, up to 20,000 files. Type letters of the path in order (`midw` finds `src/auth/middleware.ts`). A match in the file's own name ranks first, then letters in a row and the starts of words. The matched letters are highlighted.
+
+`↑` `↓` (or `ctrl+n` / `ctrl+p`) pick, `⏎` or a click opens the file with the list on its folder, `ctrl+u` clears the query, and `⌫` on an empty query closes the finder.
 
 ### Editing a file
 
@@ -127,8 +145,6 @@ Every line of an open file has a gutter mark, in view mode and edit mode, layere
 
 The footer adds them up, for example `● 2 unsaved  +3 ~2 −1  ✓4 staged`. In the file list, each file shows its git status: `M` modified, `S` or `A` staged, `U` untracked, `D` deleted, `!` conflict. Folders holding changes get a `•`.
 
-Inside a git repository, a project bar sits above the files: `⎇ claudashboard  on main ↑2 ↓1` and `3 changed · 1 staged` (or `✓ clean`).
-
 While the pane is open, it refreshes every 3 seconds: files you edit, create or delete in another editor, and `git add` / `commit` run in a terminal, show up on their own. An open file reloads when it changes on disk, or warns you if you have unsaved edits.
 
 Outside a git repository, the gutter compares the file with how it was when you first opened it, so lines you changed and saved still show (`since opened`). The marks refresh after each save, when you leave the file, after each Claude turn, and when you press `r` in the preview.
@@ -143,9 +159,10 @@ Touched files are marked **✎**. In a git repository that means what `git statu
 | --- | --- |
 | `/claudashboard` | open the hub |
 | `/claudashboard close` | close it |
+| `/claudashboard files`, `/claudashboard agents` | show that tab |
 | `/claudashboard save` | save the file being edited |
 | `/claudashboard cd <path>` | jump the explorer to a folder: relative to the working directory, or an absolute path inside it (`..` is refused) |
-| `/claudashboard reset` | clear Claude's touched files (outside git) and the agents, and move the explorer back to the root |
+| `/claudashboard reset` | clear Claude's touched files (outside git) and the agents, running and finished, and move the explorer back to the root |
 | `/claudashboard turns [on\|off]` | show or hide the session box's turns row (cost and length of the last turns); remembered across sessions |
 
 `/cdb` is the short form: `/cdb`, `/cdb cd src`, `/cdb turns` and so on.

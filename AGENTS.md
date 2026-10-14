@@ -17,6 +17,8 @@ npx prettier --write hooks tests             # formatting; CI runs --check
 claude --plugin-dir .                        # a session running this working copy, hot-reloading on save
 ```
 
+To see a change in a running session, follow the `claudashboard-dev` skill (`.claude/skills/claudashboard-dev/SKILL.md`): `/reload-plugins` when installed from this folder, or nothing at all in watch mode. Never uninstall and reinstall.
+
 Type-checking needs the engine's typings, which Claude Code writes into `.claude-plugin/types/` when it loads the mod (`claude --plugin-dir .` once); then `npx tsc -p .`.
 
 ## Rules that break the mod if ignored

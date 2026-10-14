@@ -5,7 +5,7 @@ import { EFFORT_LEVEL, clipEnd, fmtDuration, fmtTokens, fmtUsd, gauge, hasLongCo
 import { bases } from './explorer/git/git'
 import { explorerProps } from './explorer/props'
 import { fitPicture } from './explorer/media/media'
-import { contextLevel, turnSummary } from './session/vitals'
+import { contextLevel, turnStats } from './session/vitals'
 import { baseName } from './shared/paths'
 import { PANE, getActivity, getAgents, getExplorer, getTouched, getVitals, paneState, readGitTick, saved } from './state'
 
@@ -86,6 +86,9 @@ export const registerPane = (on: On, C: Colors) => {
     )
 
     // ---- vitals
+    // The turns row: oldest turn left, the latest right; sparklines shorten on a narrow pane so both series fit.
+    const ts = turnStats(v.turns)
+    const sparkW = Math.max(3, Math.min(16, Math.floor((inner - 50) / 2)))
     const effortN = EFFORT_LEVEL[v.effort] ?? 0
     const pct = v.pct ?? 0
     // From 80% the box warns, from 90% it says to compact: frame, gauge and a label beside it.
@@ -160,24 +163,27 @@ export const registerPane = (on: On, C: Colors) => {
             ))}
           </Text>
         ) : null}
-        {v.turns.length > 0 ? (
+        {ts.count > 0 ? (
           <Text wrap="truncate-end">
-            <Text color={C.dim}>{'turn '}</Text>
-            {v.turns.some(t => t.cost !== null) ? (
+            <Text color={C.dim}>{`${ts.count} ${ts.count === 1 ? 'turn ' : 'turns'}  `}</Text>
+            {ts.costs ? (
               <Text>
-                <Text color={C.dim}>{'$ '}</Text>
-                <Text color={C.ok}>{sparkline(v.turns.map(t => t.cost ?? 0))}</Text>
+                <Text color={C.dim}>{'cost '}</Text>
+                <Text color={C.ok}>{sparkline(ts.costs.slice(-sparkW))}</Text>
+                <Text color={C.text}>{` ${ts.lastCost === null ? '—' : fmtUsd(ts.lastCost)}`}</Text>
+                <Text color={C.dim}>{` (avg ${fmtUsd(ts.avgCost ?? 0)})   `}</Text>
               </Text>
             ) : null}
-            <Text color={C.dim}>{'  ⏱ '}</Text>
-            <Text color={C.accent}>{sparkline(v.turns.map(t => t.ms))}</Text>
-            <Text color={C.dim}>{`  ${turnSummary(v.turns)}`}</Text>
+            <Text color={C.dim}>{'time '}</Text>
+            <Text color={C.accent}>{sparkline(ts.times.slice(-sparkW))}</Text>
+            <Text color={C.text}>{` ${fmtDuration(ts.lastMs)}`}</Text>
+            <Text color={C.dim}>{` (avg ${fmtDuration(ts.avgMs)})`}</Text>
           </Text>
         ) : null}
       </Box>,
       level === 2 ? C.bad : level === 1 ? C.warn : C.frame,
     )
-    const vitalsRows = 2 + 1 + 2 + (v.limits.length > 0 ? 1 : 0) + (v.turns.length > 0 ? 1 : 0)
+    const vitalsRows = 2 + 1 + 2 + (v.limits.length > 0 ? 1 : 0) + (ts.count > 0 ? 1 : 0)
 
     // ---- agents: only while some run; each leaves when it finishes
     // Agents give way before the file list drops under 3 rows.

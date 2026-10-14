@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Touched follows git.** In a git repository, the touched view (`t`), its count and the ✎ marks show what `git status` reports changed right now, whoever made the change: your own edits count, and a file you revert or commit leaves the list. The view refreshes every few seconds like a folder does, and the project bar stays on top. Outside git it still shows the files Claude edited this session.
+- Fix: the session box's mode tag (`auto`, `plan`, …) kept the old mode after a Shift+Tab switch until the next prompt. It now also updates after each tool call, at the end of every turn and when Claude waits for you. Claude Code raises no event for the switch itself, so a switch made while idle shows on your next prompt.
 - Fix: the explorer cursor no longer jumps to another file on a live refresh when dotfiles are hidden or a filter is on.
 - Windows: paths with `\` and drive letters work in the explorer, the touched view and `/strackzdevhub cd`; converted pictures go to the system temp folder.
 

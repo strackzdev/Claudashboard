@@ -269,6 +269,25 @@ test('in a repo, touched follows git: your own change shows, a revert or commit 
   await ui.unmount()
 })
 
+test('the mode tag follows a switch without a new prompt: the end of a turn carries the mode', async ($, on) => {
+  engine(on)
+  disk(on, { '/w/a.ts': 'a' })
+  // The engine's own side of the classic hooks: nothing to add.
+  on('classic.UserPromptSubmit', () => ({}))
+  on('classic.Stop', () => ({}))
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await $.classic.UserPromptSubmit({ prompt: 'hi', permission_mode: 'auto' } as never)
+  expect(await ui.find({ text: /^auto$/ })).toBeDefined()
+  // Shift+Tab to plan mid-turn: the turn's end reports the new mode.
+  await $.classic.Stop({ permission_mode: 'plan', stop_hook_active: false } as never)
+  expect(await ui.find({ text: /^plan$/ })).toBeDefined()
+  // A subagent's events never change the main loop's tag.
+  await $.classic.Stop({ permission_mode: 'acceptEdits', agent_id: 'a1', stop_hook_active: false } as never)
+  expect(await ui.find({ text: /^plan$/ })).toBeDefined()
+  await ui.unmount()
+})
+
 test('the pane stays drawn while a turn runs (its live timer is a valid tree)', async ($, on) => {
   engine(on)
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))

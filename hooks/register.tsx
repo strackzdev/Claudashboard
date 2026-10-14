@@ -60,6 +60,13 @@ async function refreshUsage($: EngineInterface) {
   await updateVitals($, x => ({ ...x, ...usageToVitals(u) }))
 }
 
+/** The main loop's permission mode, from a classic hook's input; a subagent's events are left out. */
+async function noteMode($: EngineInterface, e: { permission_mode?: string; agent_id?: string }) {
+  const mode = e.permission_mode
+  if (!mode || e.agent_id) return
+  await updateVitals($, x => (x.mode === mode ? x : { ...x, mode })).catch(logged($, 'permission mode'))
+}
+
 async function refreshModel($: EngineInterface) {
   const model = await $.session.model().catch(() => '')
   if (model) await updateVitals($, x => ({ ...x, model }))
@@ -157,10 +164,22 @@ export const register: Register = (on, options) => {
     return { text: 'STRACKZDEVHUB open. Click the file list to give it the keyboard; Esc hands it back.' }
   })
 
+  // The engine raises nothing when the person switches mode (Shift+Tab), but every classic hook carries
+  // the mode: a prompt, each tool call, the end of a turn, and Claude waiting for the person.
   on('classic.UserPromptSubmit', async ($, e, next) => {
-    if (e.permission_mode) {
-      await updateVitals($, x => ({ ...x, mode: String(e.permission_mode) })).catch(logged($, 'permission mode'))
-    }
+    await noteMode($, e)
+    return next(e)
+  })
+  on('classic.PostToolUse', async ($, e, next) => {
+    await noteMode($, e)
+    return next(e)
+  })
+  on('classic.Stop', async ($, e, next) => {
+    await noteMode($, e)
+    return next(e)
+  })
+  on('classic.Notification', async ($, e, next) => {
+    await noteMode($, e)
     return next(e)
   })
 

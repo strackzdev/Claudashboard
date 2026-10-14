@@ -1,5 +1,5 @@
 // Pure logic for STRACKZDEVHUB: the props the explorer client draws, from the stored state. No `$` here, so it is testable.
-import type { Entry, Explorer } from '../../types'
+import type { Activity, Entry, Explorer } from '../../types'
 import { displayOf, visualCol } from './editor/editor'
 import type { ExplorerProps, GutterMark, Hint, Palette } from './client'
 import { MAX_DRAWN, visibleEntries, windowTop } from './model'
@@ -24,6 +24,8 @@ function gutterMark(m: LineMark): GutterMark | null {
 export function explorerProps(o: {
   ex: Explorer
   touched: Record<string, number>
+  /** What Claude does with each file this turn. */
+  activity: Record<string, Activity>
   now: number
   room: number
   width: number
@@ -32,6 +34,13 @@ export function explorerProps(o: {
   disk: readonly string[] | null
 }): ExplorerProps {
   const { ex, now, room, base, colors: C, touched: t, width: inner } = o
+  const act = o.activity
+  // A folder shows the strongest activity under it: an edit over a read.
+  const activityOf = (e: Entry): Activity | null => {
+    if (e.kind !== 'dir') return act[e.path] ?? null
+    const under = Object.entries(act).filter(([p]) => p.startsWith(`${e.path}/`))
+    return under.some(([, k]) => k === 'edit') ? 'edit' : under.length ? 'read' : null
+  }
   const rows = visibleEntries(ex)
   const rootName = baseName(ex.root) || '/'
   const crumbs = ex.onlyTouched ? [rootName, '✎ touched'] : [rootName, ...(ex.dir ? ex.dir.split('/') : [])]
@@ -165,6 +174,7 @@ export function explorerProps(o: {
         meta: ex.onlyTouched && !repo ? `${t[r.path] ?? 0} edits` : r.kind === 'dir' ? '' : `${fmtSize(r.size)} · ${fmtAge(now - r.mtimeMs)}`,
         isDir: r.kind === 'dir',
         isTouched: isTouched(r),
+        activity: activityOf(r),
         isSelected: top + i === cursor,
         git: r.git === '•' ? { letter: '•', tone: 'modified' as const } : r.git ? statusLetter(r.git) : null,
       })),

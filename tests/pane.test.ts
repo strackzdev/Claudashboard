@@ -332,6 +332,30 @@ test('the mode tag follows a switch without a new prompt: the end of a turn carr
   await ui.unmount()
 })
 
+test('the file tree shows what Claude reads and edits during a turn, and clears when it ends', async ($, on) => {
+  engine(on)
+  disk(on, { '/w/a.ts': 'a', '/w/b.ts': 'b', '/w/c.ts': 'c' })
+  on('tool.call', () => ({ result: 'ok' }))
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await $.turn.start({ turnId: 't1', text: 'hello' } as never)
+  await $.tool.call({ tool: 'Read', file_path: '/w/a.ts' } as never)
+  await $.tool.call({ tool: 'Read', file_path: '/w/b.ts' } as never)
+  await $.tool.call({ tool: 'Edit', file_path: '/w/b.ts', old_string: 'b', new_string: 'B' } as never)
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  const rows = (await explorerProps(ui)).rows as Array<{ label: string; activity: string | null }>
+  expect(rows.map(r => [r.label, r.activity])).toEqual([
+    ['a.ts', 'read'],
+    ['b.ts', 'edit'],
+    ['c.ts', null],
+  ])
+  await $.turn.complete({ turnId: 't1', answer: 'done', durationMs: 1, isAborted: false, reason: 'answer' })
+  const after = (await explorerProps(ui)).rows as Array<{ activity: string | null }>
+  expect(after.every(r => r.activity === null)).toBe(true)
+  await ui.unmount()
+})
+
 test('the pane stays drawn while a turn runs (its live timer is a valid tree)', async ($, on) => {
   engine(on)
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))

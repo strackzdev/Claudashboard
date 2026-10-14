@@ -11,7 +11,20 @@ import { loadDir, loadPreview, noteEdit, poll } from './explorer/files'
 import { refreshGit } from './explorer/git/git'
 import { ONE_DARK, THEME, registerPane } from './pane'
 import { isAbsolute, parentOf, relTo, toSlash } from './shared/paths'
-import { PANE, getExplorer, logged, openPane, paneState, setExplorer, toKey, updateAgents, updateExplorer, updateTouched, updateVitals } from './state'
+import {
+  PANE,
+  getExplorer,
+  logged,
+  updateActivity,
+  openPane,
+  paneState,
+  setExplorer,
+  toKey,
+  updateAgents,
+  updateExplorer,
+  updateTouched,
+  updateVitals,
+} from './state'
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 
@@ -81,6 +94,17 @@ async function noteMode($: EngineInterface, e: { permission_mode?: string; agent
   await updateVitals($, x => (x.mode === mode ? x : { ...x, mode })).catch(logged($, 'permission mode'))
 }
 
+/** Marks the file a Read or an edit tool is about to touch; an edit outranks a read for the rest of the turn. */
+async function noteActivity($: EngineInterface, e: { tool: string }) {
+  const kind = e.tool === 'Read' ? 'read' : EDIT_TOOLS.has(e.tool) ? 'edit' : null
+  if (!kind) return
+  const input = e as unknown as { file_path?: unknown; notebook_path?: unknown }
+  const given = typeof input.file_path === 'string' ? input.file_path : typeof input.notebook_path === 'string' ? input.notebook_path : null
+  if (!given) return
+  const path = relTo((await getExplorer($)).root, toSlash(given))
+  await updateActivity($, a => (a[path] === 'edit' || a[path] === kind ? a : { ...a, [path]: kind }))
+}
+
 async function refreshModel($: EngineInterface) {
   const model = await $.session.model().catch(() => '')
   if (model) await updateVitals($, x => ({ ...x, model }))
@@ -131,7 +155,10 @@ export const register: Register = (on, options) => {
   })
 
   on('session.end', async ($, e, next) => {
-    if (e.reason === 'clear') await updateAgents($, () => [])
+    if (e.reason === 'clear') {
+      await updateAgents($, () => [])
+      await updateActivity($, () => ({}))
+    }
     return next(e)
   })
 
@@ -145,6 +172,7 @@ export const register: Register = (on, options) => {
     }
     if (verb === 'reset') {
       await updateTouched($, () => ({}))
+      await updateActivity($, () => ({}))
       await updateAgents($, () => [])
       await setExplorer($, DEFAULT_EXPLORER)
       await initExplorer($, showHiddenDefault)
@@ -232,6 +260,7 @@ export const register: Register = (on, options) => {
       return done
     }
     void refreshGit($).catch(logged($, 'refreshGit'))
+    await updateActivity($, () => ({})).catch(logged($, 'activity'))
     const [now, u] = await Promise.all([$.clock.now(), $.session.usage().catch(() => null)])
     await updateVitals($, v => {
       const cost = u?.cost?.usd ?? null
@@ -269,6 +298,8 @@ export const register: Register = (on, options) => {
       const what = describeTool(e.tool, e as unknown as Record<string, unknown>)
       await updateAgents($, list => list.map(a => (a.id === id ? { ...a, tools: a.tools + 1, lastTool: what } : a))).catch(logged($, 'agent tool'))
     }
+    // The file tree colours a file while Claude reads or edits it: set as the call starts.
+    await noteActivity($, e).catch(logged($, 'activity'))
     const ran = await next(e)
     if (!EDIT_TOOLS.has(e.tool) || ran.deny !== undefined || ran.isError === true) return ran
     // Bookkeeping only: a failure here must never change the call's result.

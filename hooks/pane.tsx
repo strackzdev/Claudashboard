@@ -7,7 +7,7 @@ import { explorerProps } from './explorer/props'
 import { fitPicture } from './explorer/media/media'
 import { contextLevel, turnSummary } from './session/vitals'
 import { baseName } from './shared/paths'
-import { PANE, getAgents, getExplorer, getTouched, getVitals, paneState, readGitTick, saved } from './state'
+import { PANE, getActivity, getAgents, getExplorer, getTouched, getVitals, paneState, readGitTick, saved } from './state'
 
 export type Colors = Palette & { ok: string; bad: string; info: string; purple: string; frame: string }
 
@@ -56,7 +56,15 @@ export const registerPane = (on: On, C: Colors) => {
     const els = $.ui.resolve(e)
     const { Box, Text } = els
     const hasClient = 'Client' in els
-    const [v, ex, t, list, now] = await Promise.all([getVitals($), getExplorer($), getTouched($), getAgents($), $.clock.now(), readGitTick($)])
+    const [v, ex, t, list, now, act] = await Promise.all([
+      getVitals($),
+      getExplorer($),
+      getTouched($),
+      getAgents($),
+      $.clock.now(),
+      getActivity($),
+      readGitTick($),
+    ])
     // The pane's real width: drawing wider than it would overflow; every row below truncates instead.
     const W = Math.max(24, e.props.bodyColumns)
     const inner = W - 4 // a section's round border and its one-cell padding each side
@@ -220,6 +228,7 @@ export const registerPane = (on: On, C: Colors) => {
     const props = explorerProps({
       ex,
       touched: t,
+      activity: act,
       now,
       room,
       width: inner,

@@ -1,7 +1,7 @@
 // The hub's stored state and the small helpers every module reads and writes it through.
 import type { EngineInterface } from 'claude-code'
 import { atom, read, update } from 'claude-code'
-import type { Agent, Explorer, Preview, Vitals } from '../types'
+import type { Activity, Agent, Explorer, Preview, Vitals } from '../types'
 import { normalizeAgent } from './agents/agents'
 import { DEFAULT_EXPLORER, emptyPreview } from './explorer/model'
 import { DEFAULT_VITALS } from './session/vitals'
@@ -16,6 +16,7 @@ const explorer = atom({ plugin: 'strackzdevhub', key: 'explorer' } as const, DEF
 const touched = atom({ plugin: 'strackzdevhub', key: 'touched' } as const, {})
 const agents = atom({ plugin: 'strackzdevhub', key: 'agents' } as const, [] as Agent[])
 const gitTick = atom({ plugin: 'strackzdevhub', key: 'gitTick' } as const, 0)
+const activity = atom({ plugin: 'strackzdevhub', key: 'activity' } as const, {} as Record<string, Activity>)
 
 export async function getVitals($: EngineInterface): Promise<Vitals> {
   return normalize(DEFAULT_VITALS, await read($, vitals))
@@ -71,6 +72,12 @@ export function updateAgents($: EngineInterface, fn: (list: Agent[]) => Agent[])
 }
 export function updateTouched($: EngineInterface, fn: (t: Record<string, number>) => Record<string, number>) {
   return update($, touched, t => fn(t ?? {}))
+}
+export async function getActivity($: EngineInterface): Promise<Record<string, Activity>> {
+  return (await read($, activity)) ?? {}
+}
+export function updateActivity($: EngineInterface, fn: (a: Record<string, Activity>) => Record<string, Activity>) {
+  return update($, activity, a => fn(a ?? {}))
 }
 /** The gutter's base changed: redraw the pane, which reads the tick. */
 export function bumpGitTick($: EngineInterface) {

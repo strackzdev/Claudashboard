@@ -1,5 +1,8 @@
 export type Limit = { kind: string; pct: number }
 
+/** What a tool call does to a file: `read` (Read) or `edit` (Edit, Write, MultiEdit, NotebookEdit). */
+export type Activity = 'read' | 'edit'
+
 /** One finished turn of the main loop: how long it ran and what it cost (null when usage was unknown). */
 export type Turn = { ms: number; cost: number | null }
 
@@ -113,6 +116,8 @@ declare module 'claude-code' {
       vitals: Vitals
       explorer: Explorer
       touched: Record<string, number>
+      /** What Claude (or a subagent) does with each file this turn, by its path from the root; cleared when the turn ends. */
+      activity: Record<string, Activity>
       agents: Agent[]
       /** Bumped when git data for the open file arrives, so the pane redraws its gutter. */
       gitTick: number

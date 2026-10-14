@@ -11,6 +11,8 @@ export type Row = {
   isDir: boolean
   isTouched: boolean
   isSelected: boolean
+  /** What Claude is doing with the file (or something under the folder) this turn. */
+  activity: 'read' | 'edit' | null
   /** The file's git status letter, or a dot on a folder holding changes. */
   git: GitLetter | null
 }
@@ -231,21 +233,35 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
       ) : null}
       {props.rows.map((r, i) => {
         const bg = r.isSelected ? c.selectedBg : undefined
-        // As in VS Code: a changed file's name takes its git colour.
-        const nameColor = r.git && r.git.letter !== '•' ? letterColor(r.git.tone) : r.isDir ? c.dir : r.isTouched ? c.touched : c.text
+        // What Claude does this turn comes first (yellow while it edits, purple while it reads); then, as in
+        // VS Code, a changed file's name takes its git colour.
+        const actColor = r.activity === 'edit' ? c.touched : r.activity === 'read' ? c.purple : null
+        const nameColor = actColor ?? (r.git && r.git.letter !== '•' ? letterColor(r.git.tone) : r.isDir ? c.dir : r.isTouched ? c.touched : c.text)
+        const icon = r.activity === 'edit' ? '✎' : r.activity === 'read' ? '◉' : r.isTouched ? '✎' : r.icon
         return (
           <Box key={`row${i}`} flexDirection="row" width={W}>
             <Text backgroundColor={bg} color={r.isSelected ? c.accent : c.dim} hover={{ backgroundColor: c.hoverBg }}>
               {r.isSelected ? '▌' : ' '}
             </Text>
-            <Text backgroundColor={bg} color={r.isTouched ? c.touched : r.isDir ? c.dir : c.dim} hover={{ backgroundColor: c.hoverBg }}>
-              {`${r.isTouched ? '✎' : r.icon} `}
+            <Text
+              backgroundColor={bg}
+              color={actColor ?? (r.isTouched ? c.touched : r.isDir ? c.dir : c.dim)}
+              bold={actColor !== null}
+              hover={{ backgroundColor: c.hoverBg }}
+            >
+              {`${icon} `}
             </Text>
             <Text backgroundColor={bg} color={r.git ? letterColor(r.git.tone) : c.dim} bold hover={{ backgroundColor: c.hoverBg }}>
               {`${r.git?.letter ?? ' '} `}
             </Text>
             <Box width={nameW}>
-              <Text backgroundColor={bg} color={nameColor} bold={r.isSelected || r.isDir} wrap="truncate-end" hover={{ backgroundColor: c.hoverBg }}>
+              <Text
+                backgroundColor={bg}
+                color={nameColor}
+                bold={r.isSelected || r.isDir || actColor !== null}
+                wrap="truncate-end"
+                hover={{ backgroundColor: c.hoverBg }}
+              >
                 {r.label.padEnd(nameW)}
               </Text>
             </Box>

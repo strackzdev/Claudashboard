@@ -3,6 +3,7 @@
 import type { ClientModule } from 'claude-code'
 import type { DiffRow } from '../../types'
 import type { AgentLine } from '../agents/view'
+import type { MdKind, MdRow, MdStyle } from './media/markdown'
 import type { HelpLine } from '../help'
 import { agentsBody, finderBody, framed, helpBody, tabAt, tabStrip } from './views'
 
@@ -45,7 +46,7 @@ export type Hint = { key: string; label: string }
 
 /** What the explorer posts back to the hooks module: every message carries the rows it shows. */
 export type UiMessage =
-  | { k: 'key'; key: string; ctrl: boolean; meta: boolean; room: number }
+  | { k: 'key'; key: string; ctrl: boolean; meta: boolean; room: number; width?: number }
   | { k: 'mode' | 'crumb'; room: number }
   | { k: 'place'; row: number; vis: number; room: number }
   | { k: 'click'; index: number; room: number }
@@ -79,8 +80,8 @@ export type ExplorerProps = {
   /** The git gutter for the lines in view (null: no data yet), and the file's change counts. */
   gutter: Array<GutterMark | null> | null
   changes: Changes | null
-  /** Rendered markdown for the lines in view, when a markdown file shows rendered. */
-  markdown: string | null
+  /** Rendered markdown's rows in view, when a markdown file shows rendered. */
+  markdown: MdRow[] | null
   /** The editor's window: display lines (tabs expanded), the cursor in it, the gutter and text widths. */
   edit: EditView | null
   /** The picked lines, first and last, 1-based; null when none. */
@@ -170,7 +171,7 @@ function complete(raw: Partial<ExplorerProps> | null | undefined): ExplorerProps
     dirtyMark: typeof p.dirtyMark === 'string' ? p.dirtyMark : null,
     gutter: Array.isArray(p.gutter) ? p.gutter : null,
     changes: p.changes && typeof p.changes.added === 'number' ? p.changes : null,
-    markdown: typeof p.markdown === 'string' ? p.markdown : null,
+    markdown: Array.isArray(p.markdown) ? p.markdown : null,
     edit: p.edit && Array.isArray(p.edit.lines) ? p.edit : null,
     diff: Array.isArray(p.diff) ? p.diff : null,
     selection: Array.isArray(p.selection) && p.selection.length === 2 ? p.selection : null,
@@ -187,7 +188,7 @@ function complete(raw: Partial<ExplorerProps> | null | undefined): ExplorerProps
 }
 
 const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
-  const { Box, Text, Code, Markdown } = surface.elements
+  const { Box, Text, Code } = surface.elements
   const props = complete(rawProps)
   const ref = surface.state?.ref ?? { props, ticks: 0, lastNow: -1 }
   ref.props = props
@@ -206,7 +207,7 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
       surface.setState({ ref })
     })
     surface.onKey(k => {
-      post({ k: 'key', key: k.key, ctrl: k.ctrl ?? false, meta: k.meta ?? false, room: ref.props.room })
+      post({ k: 'key', key: k.key, ctrl: k.ctrl ?? false, meta: k.meta ?? false, room: ref.props.room, width: ref.props.width })
     })
     surface.onPointer(raw => {
       const cur = ref.props
@@ -273,6 +274,27 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
     return m && m.tone !== 'deleted' ? markColor(m.tone) : undefined
   }
   const W = Math.max(20, props.width)
+  /** How a markdown span draws: headings in the accent, code in the warm colour, links underlined, rules and borders dim. */
+  const mdStyle = (kind: MdKind, style: MdStyle) => ({
+    color:
+      style === 'dim'
+        ? c.dim
+        : style === 'code'
+          ? c.warn
+          : style === 'link'
+            ? c.accent
+            : kind === 'h1' || kind === 'h2'
+              ? c.accent
+              : kind === 'h3'
+                ? c.purple
+                : kind === 'quote'
+                  ? c.dim
+                  : c.text,
+    bold: style === 'bold' || style === 'boldItalic' || kind === 'h1' || kind === 'h2' || kind === 'h3',
+    italic: style === 'italic' || style === 'boldItalic' || kind === 'quote',
+    underline: style === 'link',
+    strikethrough: style === 'strike',
+  })
   const metaW = props.mode === 'list' ? Math.min(20, Math.max(0, W - 24)) : 0
   const nameW = Math.max(6, W - metaW - 6)
 
@@ -446,7 +468,9 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
       {diffView}
       {props.markdown !== null ? (
         <Box flexDirection="column" width={W} height={Math.max(1, props.room - (props.note ? 1 : 0))} overflow="hidden">
-          <Markdown text={props.markdown || ' '} />
+          {props.markdown.map(r => (
+            <Text wrap="truncate-end">{r.spans.length === 0 ? ' ' : r.spans.map(s => <Text {...mdStyle(r.kind, s.style)}>{s.text}</Text>)}</Text>
+          ))}
         </Box>
       ) : null}
       {props.code && props.code.source ? (

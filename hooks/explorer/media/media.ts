@@ -10,19 +10,6 @@ export function kindOf(path: string): 'text' | 'markdown' | 'image' {
   return 'text'
 }
 
-/**
- * The markdown for the lines in view. A window that starts inside a fenced code block reopens
- * the fence, so the rest of the window does not read as a code block turned inside out.
- */
-export function markdownWindow(lines: readonly string[], top: number, count: number): string {
-  let isInFence = false
-  for (let i = 0; i < top && i < lines.length; i++) {
-    if (/^\s*(```|~~~)/.test(lines[i] ?? '')) isInFence = !isInFence
-  }
-  const body = lines.slice(top, top + count).join('\n')
-  return isInFence ? `\`\`\`\n${body}` : body
-}
-
 /** A PNG's pixel size from its IHDR chunk, or null for anything else. */
 export function pngSize(bytes: Uint8Array): { width: number; height: number } | null {
   const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]

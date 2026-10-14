@@ -1,6 +1,7 @@
 // Pure logic for Claudashboard: the explorer's state, its preview, and its key reducer. No `$` here, so it is testable.
 import type { Entry, Explorer, Preview } from '../../types'
 import { clamp, clipEnd, fmtSize } from '../shared/format'
+import { renderMarkdown, rowOfLine } from './media/markdown'
 
 export const DEFAULT_EXPLORER: Explorer = {
   root: '',
@@ -112,9 +113,9 @@ export type Key = { key: string; ctrl?: true; meta?: true; shift?: true }
 
 /**
  * One key against the explorer: the next state, and the I/O the hooks module owes for it.
- * `room` is how many rows the list or preview shows, for paging.
+ * `room` is how many rows the list or preview shows, for paging; `width` how wide, for rendered markdown.
  */
-export function reduceKey(ex: Explorer, k: Key, room: number): { ex: Explorer; effect: Effect } {
+export function reduceKey(ex: Explorer, k: Key, room: number, width = 80): { ex: Explorer; effect: Effect } {
   const page = Math.max(1, room - 1)
   const key = k.key
   const isFind = (key === 'f' && !k.ctrl && !k.meta) || (key === 'p' && k.ctrl === true)
@@ -141,8 +142,10 @@ export function reduceKey(ex: Explorer, k: Key, room: number): { ex: Explorer; e
 
   if (ex.preview) {
     const p = ex.preview
-    // A note above the code takes one of the rows.
-    const last = Math.max(0, p.lines.length - (hasNoteRow(p) ? room - 1 : room))
+    // A note above the code takes one of the rows. Rendered markdown scrolls until its last line is drawn.
+    const rows = hasNoteRow(p) ? room - 1 : room
+    const isRendered = p.kind === 'markdown' && p.mdView !== 'source'
+    const last = Math.max(0, (isRendered ? renderMarkdown(p.lines, width).length : p.lines.length) - rows)
     const scroll = (top: number) => ({ ex: { ...ex, preview: { ...p, top: clamp(top, 0, last) } }, effect: null })
     if (key === 'backspace' || key === 'left' || key === 'h' || key === 'q') return { ex, effect: { kind: 'up' } }
     if (key === 'down' || key === 'j') return scroll(p.top + 1)
@@ -156,7 +159,10 @@ export function reduceKey(ex: Explorer, k: Key, room: number): { ex: Explorer; e
     if (key === 'r') return { ex, effect: { kind: 'reload' } }
     if (key === 'd' && p.kind !== 'image') return { ex, effect: { kind: 'diff' } }
     if (key === 'm' && p.kind === 'markdown') {
-      return { ex: { ...ex, preview: { ...p, mdView: p.mdView === 'source' ? 'rendered' : 'source' } }, effect: null }
+      // The view stays where it was: rendered rows know their source line.
+      const md = renderMarkdown(p.lines, width)
+      const top = isRendered ? (md[p.top]?.src ?? 0) : rowOfLine(md, p.top)
+      return { ex: { ...ex, preview: { ...p, mdView: isRendered ? 'source' : 'rendered', top } }, effect: null }
     }
     return { ex, effect: null }
   }

@@ -415,7 +415,7 @@ export const register: Register = (on, options) => {
       return {}
     }
     if (d.k !== 'key' || typeof d.key !== 'string') return {}
-    const { ex: nextEx, effect } = reduceKey(ex, toKey(d), room)
+    const { ex: nextEx, effect } = reduceKey(ex, toKey(d), room, Math.max(20, Number(d.width) || 80))
     if (nextEx !== ex) await setExplorer($, nextEx)
     if (effect?.kind === 'open') await openEntry($, effect.entry, effect.edit === true)
     else if (effect?.kind === 'edit') await enterEdit($)

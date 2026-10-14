@@ -11,7 +11,7 @@ import type { Base } from './git/git'
 import type { LineMark } from './git/gitdiff'
 import { lineMarks, statusLetter } from './git/gitdiff'
 import { fitHeader } from './header'
-import { markdownWindow } from './media/media'
+import { renderMarkdown } from './media/markdown'
 import { baseName } from '../shared/paths'
 
 const HELP: Hint = { key: '?', label: 'help' }
@@ -78,6 +78,9 @@ export function explorerProps(o: {
             HELP,
           ]
     const isRendered = !isEdit && p.kind === 'markdown' && p.mdView !== 'source'
+    // Rendered markdown is laid out here, row by row: it scrolls by rows, and `top` counts rows.
+    const mdRows = isRendered ? renderMarkdown(p.lines, inner) : null
+    const md = mdRows ? mdRows.slice(p.top, p.top + codeRoom) : null
     // The git gutter: every line's layer and change, for the lines in view.
     const diff = base ? lineMarks({ head: base.head, index: base.index, disk: o.disk ?? p.lines, buffer: p.lines }) : null
     const gutter = diff ? diff.marks.slice(p.top, end).map(gutterMark) : null
@@ -102,14 +105,22 @@ export function explorerProps(o: {
     props = {
       mode: 'preview',
       crumbs: [rootName, ...p.path.split('/')],
-      counter: isEdit ? `Ln ${p.row + 1}, Col ${p.col + 1}` : p.lines.length > codeRoom ? `${p.top + 1}–${end} / ${p.lines.length}` : `${p.lines.length} lines`,
+      counter: isEdit
+        ? `Ln ${p.row + 1}, Col ${p.col + 1}`
+        : mdRows && md
+          ? mdRows.length > codeRoom
+            ? `${(md[0]?.src ?? 0) + 1}–${(md[md.length - 1]?.src ?? 0) + 1} / ${p.lines.length}`
+            : `${p.lines.length} lines`
+          : p.lines.length > codeRoom
+            ? `${p.top + 1}–${end} / ${p.lines.length}`
+            : `${p.lines.length} lines`,
       filter: null,
       hints,
       rows: [],
       top: 0,
       room,
       width: inner,
-      markdown: isRendered ? markdownWindow(p.lines, p.top, codeRoom) : null,
+      markdown: md,
       code:
         !isEdit && !isRendered && p.kind !== 'image' && end > p.top
           ? {

@@ -64,7 +64,8 @@ hooks/
     editor/editing.ts   I/O: enter, leave, save, undo
     git/gitdiff.ts      pure: line diff, the diff view's hunks, porcelain and branch parsing
     git/git.ts          I/O: git status, the gutter's base (HEAD and index)
-    media/media.ts      pure: markdown windows, PNG sizes, picture fitting
+    media/media.ts      pure: file kinds, PNG sizes, picture fitting
+    media/markdown.ts   pure: markdown laid out as styled rows (headings, lists, tables, code)
     media/picture.ts    I/O: PNG as is, other formats converted by ImageMagick or ffmpeg
 
 types/index.d.ts        the $.state contract (one file, see ADR 0004)
@@ -86,3 +87,4 @@ The reasons behind the shape are in [`docs/adr/`](adr/):
 - [0005](adr/0005-slash-paths.md): `/` paths inside, converted where they come in
 - [0006](adr/0006-touched-follows-git.md): touched follows `git status` inside a repository
 - [0007](adr/0007-one-client-for-every-tab.md): one client module draws every tab
+- [0008](adr/0008-markdown-laid-out-by-the-pane.md): markdown laid out by the pane, not the engine's Markdown element

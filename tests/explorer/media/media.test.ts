@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { fitPicture, fromBase64, kindOf, markdownWindow, pngSize } from '../../../hooks/explorer/media/media'
+import { fitPicture, fromBase64, kindOf, pngSize } from '../../../hooks/explorer/media/media'
 
 test('files show by kind: markdown, pictures, the rest as code', () => {
   expect(kindOf('README.md')).toBe('markdown')
@@ -8,13 +8,6 @@ test('files show by kind: markdown, pictures, the rest as code', () => {
   expect(kindOf('shot.png')).toBe('image')
   expect(kindOf('photo.JPEG')).toBe('image')
   expect(kindOf('a.ts')).toBe('text')
-})
-
-test('a markdown window that starts inside a code fence reopens it', () => {
-  const lines = ['# Title', '```ts', 'const a = 1', 'const b = 2', '```', 'after']
-  expect(markdownWindow(lines, 0, 2)).toBe('# Title\n```ts')
-  expect(markdownWindow(lines, 3, 3)).toBe('```\nconst b = 2\n```\nafter')
-  expect(markdownWindow(lines, 5, 3)).toBe('after')
 })
 
 test("a PNG's size comes from its header; pictures keep their proportions", () => {

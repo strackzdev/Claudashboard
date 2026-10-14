@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { DEFAULT_EXPLORER, emptyPreview, previewOf, reduceKey, sortEntries, visibleEntries } from '../../hooks/explorer/model'
+import { DEFAULT_EXPLORER, emptyPreview, mentionOf, previewOf, reduceKey, selectLine, sortEntries, visibleEntries } from '../../hooks/explorer/model'
 import type { Entry, Explorer } from '../../types'
 
 const file = (path: string, kind: Entry['kind'] = 'file'): Entry => ({
@@ -89,4 +89,20 @@ test('files the preview had to alter are read-only', () => {
   expect(previewOf('min.js', `a\n${'x'.repeat(10_001)}\n`, 10_003).readOnly).toBe('line 2 is longer than 10000 characters')
   expect(previewOf('b', 'a\u0000', 2).readOnly).toBe('binary file')
   expect(previewOf('ok.ts', 'const a = 1\n', 12).readOnly).toBe(null)
+})
+
+test('picking lines: a click selects one, shift or a drag stretches it, clicking the one line again clears', () => {
+  let p = emptyPreview('a.ts', { lines: ['1', '2', '3', '4', '5'] })
+  p = selectLine(p, 1, false)
+  expect(p.sel).toEqual({ anchor: 1, head: 1 })
+  p = selectLine(p, 3, true)
+  expect(p.sel).toEqual({ anchor: 1, head: 3 })
+  p = selectLine(p, 0, true)
+  expect(p.sel).toEqual({ anchor: 1, head: 0 })
+  p = selectLine(selectLine(p, 4, false), 4, false)
+  expect(p.sel).toBe(null)
+  expect(selectLine(p, 99, false).sel).toEqual({ anchor: 4, head: 4 })
+  expect(mentionOf('src/a.ts', { anchor: 3, head: 1 })).toBe('src/a.ts#2-4')
+  expect(mentionOf('src/a.ts', { anchor: 6, head: 6 })).toBe('src/a.ts#7-7')
+  expect(mentionOf('src/a.ts', null)).toBe('src/a.ts')
 })

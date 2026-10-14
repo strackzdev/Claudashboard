@@ -2,7 +2,7 @@
 import type { Activity, Entry, Explorer } from '../../types'
 import { displayOf, visualCol } from './editor/editor'
 import type { ExplorerProps, GutterMark, Hint, Palette } from './client'
-import { MAX_DRAWN, visibleEntries, windowTop } from './model'
+import { MAX_DRAWN, selRange, visibleEntries, windowTop } from './model'
 import { clipEnd, fmtAge, fmtSize } from '../shared/format'
 import type { Base } from './git/git'
 import type { LineMark } from './git/gitdiff'
@@ -75,7 +75,8 @@ export function explorerProps(o: {
             { key: '↑↓', label: 'scroll' },
             { key: 'PgUp/Dn', label: 'page' },
             { key: 'g/G', label: 'top/end' },
-            { key: '@', label: 'mention' },
+            { key: '@', label: p.sel ? `mention ${selRange(p.sel)[0] + 1}–${selRange(p.sel)[1] + 1}` : 'mention' },
+            { key: 'click', label: p.sel ? 'clear' : 'pick lines' },
             { key: '⌫', label: 'back' },
           ]
     const isRendered = !isEdit && p.kind === 'markdown' && p.mdView !== 'source'
@@ -135,6 +136,7 @@ export function explorerProps(o: {
       changes,
       edit,
       diff: null,
+      selection: p.sel && !isEdit ? [selRange(p.sel)[0] + 1, selRange(p.sel)[1] + 1] : null,
     }
     // A picture's size sits bottom right, like a file's line count; the note line is kept for problems.
     // The diff view (d) draws its rows in the code's place.
@@ -216,6 +218,7 @@ export function explorerProps(o: {
       markdown: null,
       edit: null,
       diff: null,
+      selection: null,
       empty:
         rows.length > 0
           ? null

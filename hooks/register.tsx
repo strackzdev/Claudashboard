@@ -6,7 +6,7 @@ import { contextLevel, pushTurn, usageToVitals } from './session/vitals'
 import { describeTool, normalizeAgent, stepAgent } from './agents/agents'
 import { editMessage, enterEdit, leaveEdit, saveFile } from './explorer/editor/editing'
 import type { UiMessage } from './explorer/client'
-import { DEFAULT_EXPLORER, reduceKey, visibleEntries } from './explorer/model'
+import { DEFAULT_EXPLORER, reduceKey, selectLine, visibleEntries } from './explorer/model'
 import { loadDir, loadPreview, noteEdit, openDiff, poll } from './explorer/files'
 import { refreshGit } from './explorer/git/git'
 import { ONE_DARK, THEME, registerPane } from './pane'
@@ -19,6 +19,7 @@ import {
   openPane,
   paneState,
   setExplorer,
+  setPreview,
   toKey,
   updateAgents,
   updateExplorer,
@@ -318,6 +319,11 @@ export const register: Register = (on, options) => {
     }
     if (d.k === 'mode') {
       if (ex.preview) await enterEdit($)
+      return {}
+    }
+    if (d.k === 'line' && typeof d.row === 'number' && ex.preview && !ex.preview.diff) {
+      const line = ex.preview.top + d.row
+      await setPreview($, p => selectLine(p, line, d.isExtend === true))
       return {}
     }
     if (d.k === 'click' && typeof d.index === 'number') {

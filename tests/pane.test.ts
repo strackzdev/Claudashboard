@@ -310,6 +310,34 @@ test("d shows the open file's changes against HEAD, and d again goes back to the
   await ui.unmount()
 })
 
+test('pick lines in the file view with a click and shift+click (or a drag), then @ mentions just them', async ($, on) => {
+  engine(on)
+  disk(on, { '/w/a.ts': 'l1\nl2\nl3\nl4\nl5\n' })
+  let filled = ''
+  on('prompt.fill', (_$, e) => {
+    filled = e.text
+    return { isFilled: true }
+  })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await ui.key({ key: 'return', in: 'explorer' })
+  // Rows 0 and 1 are the header and the rule: the file's first line is row 2.
+  await ui.pointer({ type: 'down', x: 8, y: 3, button: 'left', in: 'explorer' })
+  await ui.pointer({ type: 'down', x: 8, y: 4, button: 'left', shift: true, in: 'explorer' })
+  expect((await explorerProps(ui)).selection).toEqual([2, 3])
+  await ui.key({ key: '@', in: 'explorer' })
+  expect(filled).toBe('@a.ts#2-3 ')
+  // A drag picks from where it started.
+  await ui.pointer({ type: 'down', x: 8, y: 2, button: 'left', in: 'explorer' })
+  await ui.pointer({ type: 'move', x: 8, y: 5, button: 'left', in: 'explorer' })
+  expect((await explorerProps(ui)).selection).toEqual([1, 4])
+  // Clicking the one picked line again clears the pick.
+  await ui.pointer({ type: 'down', x: 8, y: 6, button: 'left', in: 'explorer' })
+  await ui.pointer({ type: 'down', x: 8, y: 6, button: 'left', in: 'explorer' })
+  expect((await explorerProps(ui)).selection).toBe(null)
+  await ui.unmount()
+})
+
 test('in a repo, touched follows git: your own change shows, a revert or commit clears it', async ($, on) => {
   const clock = mock.clock(on)
   disk(on, { '/w/a.ts': 'a', '/w/b.ts': 'b' })

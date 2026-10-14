@@ -45,6 +45,7 @@ export type UiMessage =
   | { k: 'mode' | 'crumb'; room: number }
   | { k: 'place'; row: number; vis: number; room: number }
   | { k: 'click'; index: number; room: number }
+  | { k: 'line'; row: number; isExtend: boolean; room: number }
 
 export type ExplorerProps = {
   mode: 'list' | 'preview'
@@ -76,6 +77,8 @@ export type ExplorerProps = {
   markdown: string | null
   /** The editor's window: display lines (tabs expanded), the cursor in it, the gutter and text widths. */
   edit: EditView | null
+  /** The picked lines, first and last, 1-based; null when none. */
+  selection: [number, number] | null
   /** The diff view's rows in view: hunk headers, shared lines, removed and added lines. */
   diff: DiffRow[] | null
 }
@@ -90,7 +93,8 @@ export type EditView = {
   textW: number
 }
 
-type Ref = { props: ExplorerProps }
+/** The props as last drawn, and the line a drag last reached (so a drag posts once per line). */
+type Ref = { props: ExplorerProps; dragRow?: number | null }
 type State = { ref: Ref }
 
 /** Rows above the list: the breadcrumb and a rule. */
@@ -140,6 +144,7 @@ function complete(raw: Partial<ExplorerProps> | null | undefined): ExplorerProps
     markdown: typeof p.markdown === 'string' ? p.markdown : null,
     edit: p.edit && Array.isArray(p.edit.lines) ? p.edit : null,
     diff: Array.isArray(p.diff) ? p.diff : null,
+    selection: Array.isArray(p.selection) && p.selection.length === 2 ? p.selection : null,
   }
 }
 
@@ -156,8 +161,19 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
       post({ k: 'key', key: k.key, ctrl: k.ctrl ?? false, meta: k.meta ?? false, room: ref.props.room })
     })
     surface.onPointer(p => {
-      if (p.type !== 'down' || p.button !== 'left') return
       const cur = ref.props
+      // In the file view, a press picks a line and a drag (or shift+click) stretches the pick.
+      const codeRow = p.y - HEAD - (cur.note ? 1 : 0)
+      const isOnCode = cur.code !== null && !cur.edit && codeRow >= 0 && codeRow < cur.code.source.split('\n').length
+      if (p.type === 'move' && p.button === 'left') {
+        if (isOnCode && codeRow !== ref.dragRow) {
+          ref.dragRow = codeRow
+          post({ k: 'line', row: codeRow, isExtend: true, room: cur.room })
+        }
+        return
+      }
+      if (p.type !== 'down' || p.button !== 'left') return
+      ref.dragRow = null
       // The mode label toggles view and edit; the rest of the breadcrumb goes back.
       const label = cur.label ?? ''
       if (p.y === 0 && label && p.x >= Math.max(10, cur.width) - label.length) return post({ k: 'mode', room: cur.room })
@@ -167,6 +183,10 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
         if (row < 0 || row >= cur.edit.lines.length) return
         const vis = p.x - cur.edit.gutterW - 4 + (row === cur.edit.cursorRow ? cur.edit.hoff : 0)
         return post({ k: 'place', row, vis, room: cur.room })
+      }
+      if (isOnCode) {
+        ref.dragRow = codeRow
+        return post({ k: 'line', row: codeRow, isExtend: p.shift === true, room: cur.room })
       }
       const i = p.y - HEAD
       if (cur.mode === 'list' && i >= 0 && i < cur.rows.length) post({ k: 'click', index: cur.top + i, room: cur.room })
@@ -324,6 +344,8 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
     </Box>
   ) : null
 
+  const isPicked = (line: number) => props.selection !== null && line >= props.selection[0] && line <= props.selection[1]
+
   // The diff view: the new line's number (the old one's on a removed line), a +/- mark, the text.
   const diffNumW = Math.max(3, ...(props.diff ?? []).map(r => String(r.new ?? r.old ?? '').length))
   const diffView = props.diff ? (
@@ -367,10 +389,14 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
             {props.code.source.split('\n').map((_, i) => (
               <Text>
                 {markAt(i)}
-                <Text color={numberColor(i) ?? c.dim} bold={numberColor(i) !== undefined}>
+                <Text
+                  color={isPicked((props.code?.startLine ?? 1) + i) ? c.accent : (numberColor(i) ?? c.dim)}
+                  backgroundColor={isPicked((props.code?.startLine ?? 1) + i) ? c.selectedBg : undefined}
+                  bold={isPicked((props.code?.startLine ?? 1) + i) || numberColor(i) !== undefined}
+                >
                   {String((props.code?.startLine ?? 1) + i).padStart(numW)}
                 </Text>
-                <Text color={c.dim}>{' │'}</Text>
+                <Text color={isPicked((props.code?.startLine ?? 1) + i) ? c.accent : c.dim}>{isPicked((props.code?.startLine ?? 1) + i) ? ' ┃' : ' │'}</Text>
               </Text>
             ))}
           </Box>

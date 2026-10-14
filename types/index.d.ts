@@ -68,6 +68,8 @@ export type Preview = {
   image?: { file: string; width: number; height: number } | null
   /** The diff view (`d`): the file's changes against git's HEAD (or the text as first opened, outside git), and where the file view was scrolled. */
   diff?: { rows: DiffRow[]; fileTop: number } | null
+  /** Lines picked in the view (a click, then shift+click or a drag), 0-based: where it started and where it ends now. */
+  sel?: { anchor: number; head: number } | null
 }
 
 /** The git repository the folder on screen belongs to: drawn as the project bar above the files. */

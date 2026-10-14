@@ -4,28 +4,6 @@
 
 ![Claudashboard's basic view: the session box with the turns row, one subagent running, and the explorer on a clean git repository](docs/images/basic-view.png)
 
-```
-╭──────────────────────────────────────────────────────╮
-│ SESSION                                  ● 0:37      │
-│  opus 5.5  1M  effort ●●●○○ high               auto  │
-│ ctx  ▰▰▰▰▰▱▱▱▱▱ 51%  102k / 1.0M  ⟲1    $1.84 +$0.21 │
-│ lim  5h ▰▰▱▱▱▱ 38%    7d ▰▱▱▱▱▱ 12%                  │
-╰──────────────────────────────────────────────────────╯
-╭──────────────────────────────────────────────────────╮
-│ AGENTS · 1 running                                   │
-│ ◆ Explore  haiku 5.5  4 steps · 3 tools · 18k   0:42 │
-│   ↳ Find the auth middleware  ⟶ Read middleware.ts   │
-╰──────────────────────────────────────────────────────╯
-╭──────────────────────────────────────────────────────╮
-│ project › src › auth                          3/12   │
-│ ──────────────────────────────────────────────────── │
-│▌▸ lib/                                               │
-│ ✎ middleware.ts                    4.8 KB · just now │
-│ · session.ts                       1.2 KB · 1h ago   │
-│ ⏎ open  ⌫ back  / filter  . dotfiles  t touched  @ … │
-╰──────────────────────────────────────────────────────╯
-```
-
 Every number comes from real session events. Nothing leaves your machine.
 
 ## Install

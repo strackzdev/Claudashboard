@@ -67,7 +67,7 @@ claude --plugin-dir ./claude_strackzdevhub
 | **Context** | A gauge plus used / window tokens. `⟲n` counts compactions. From 80% the box's frame and gauge turn amber with *⚠ filling up*; from 90% red with *⚠ compact soon*. A toast marks each threshold once, and a line under the prompt keeps the percentage in view with the pane closed. |
 | **Cost** | The session total, plus what the last turn added. |
 | **Limits** | The 5-hour and 7-day rate-limit windows, when your plan reports them. |
-| **Turns** | `12 turns  cost ▁▃█▂ $0.21 (avg $0.11)   time ▂▅▁▃ 0:20 (avg 0:14)`: one bar per turn, oldest left and latest right (up to 16), each followed by the latest turn's value and the average. |
+| **Turns** | Off by default; `/strackzdevhub turns` shows it (remembered across sessions). `12 turns  cost ▁▃█▂ $0.21 (avg $0.11)   time ▂▅▁▃ 0:20 (avg 0:14)`: one bar per turn, oldest left and latest right (up to 16), each followed by the latest turn's value and the average. |
 
 ### Agents
 This section appears only while subagents run. Each running agent gets a card showing:
@@ -166,6 +166,7 @@ Touched files are marked **✎**. In a git repository that means what `git statu
 | `/strackzdevhub save` | save the file being edited |
 | `/strackzdevhub cd <path>` | jump the explorer to a folder: relative to the working directory, or an absolute path inside it (`..` is refused) |
 | `/strackzdevhub reset` | clear Claude's touched files (outside git) and the agents, and move the explorer back to the root |
+| `/strackzdevhub turns [on\|off]` | show or hide the session box's turns row (cost and length of the last turns); remembered across sessions |
 
 ## Configure
 

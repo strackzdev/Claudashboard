@@ -62,20 +62,35 @@ test('the context alarm: the box warns from 80%, says to compact from 90%, and t
   await ui.unmount()
 })
 
-test('a finished turn adds to the turns row: its length as a sparkline', async ($, on) => {
+test('the turns row is off until /strackzdevhub turns, then shows the finished turns', async ($, on) => {
   const clock = mock.clock(on)
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
-  const before = await $.ui.mount({ ...pane(80), surface: 'terminal' })
-  expect(await before.find({ text: /^time $/ })).toBeUndefined()
-  await before.unmount()
+  const stored: Record<string, unknown> = {}
+  on('store.set', (_$, e) => {
+    stored[e.key] = e.value
+    return { value: undefined }
+  })
   await $.turn.start({ turnId: 't1', text: 'hello' } as never)
   await clock.advance(42_000)
   await $.turn.complete({ turnId: 't1', answer: 'done', durationMs: 42_000, isAborted: false, reason: 'answer' })
-  const after = await $.ui.mount({ ...pane(80), surface: 'terminal' })
-  expect(await after.find({ text: /^1 turn/ })).toBeDefined()
-  expect(await after.find({ text: / \(avg 0:42\)$/ })).toBeDefined()
-  await after.unmount()
+  const hidden = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  expect(await hidden.find({ text: /^time $/ })).toBeUndefined()
+  await hidden.unmount()
+
+  const turnedOn = await $.command.run({ command: 'strackzdevhub', args: 'turns' } as never)
+  expect(turnedOn.text).toContain('turns row on')
+  // Remembered for the next session.
+  expect(stored.showTurns).toBe(true)
+  const shown = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  expect(await shown.find({ text: /^1 turn/ })).toBeDefined()
+  expect(await shown.find({ text: / \(avg 0:42\)$/ })).toBeDefined()
+  await shown.unmount()
+
+  await $.command.run({ command: 'strackzdevhub', args: 'turns off' } as never)
+  const off = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  expect(await off.find({ text: /^1 turn/ })).toBeUndefined()
+  await off.unmount()
 })
 
 test('the agents section shows while agents run, and leaves with them', async ($, on) => {

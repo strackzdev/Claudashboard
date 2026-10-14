@@ -14,6 +14,7 @@ import { isAbsolute, parentOf, relTo, toSlash } from './shared/paths'
 import {
   PANE,
   getExplorer,
+  getVitals,
   logged,
   updateActivity,
   openPane,
@@ -138,10 +139,13 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'strackzdevhub',
-      description: 'STRACKZDEVHUB: open or close the hub, jump the explorer to a folder, or reset it',
-      argumentHint: '[close|cd <path>|save|reset]',
+      description: 'STRACKZDEVHUB: open or close the hub, jump the explorer to a folder, show the turns row, or reset it',
+      argumentHint: '[close|cd <path>|save|reset|turns [on|off]]',
     })
     await Promise.all([refreshUsage($), refreshModel($)]).catch(logged($, 'session vitals'))
+    // The turns row is off unless the person turned it on, in this session or an earlier one.
+    const showTurns = (await $.store.get('showTurns').catch(() => undefined)) === true
+    await updateVitals($, v => ({ ...v, showTurns })).catch(logged($, 'showTurns'))
     await initExplorer($, showHiddenDefault).catch(logged($, 'initExplorer'))
     if (options.openOnStart !== false) void openPane($).catch(logged($, 'openPane'))
     // Live refresh: edits made in another editor, git add/commit run elsewhere.
@@ -170,6 +174,15 @@ export const register: Register = (on, options) => {
       await $.ui.close({ id: PANE })
       paneState.isOpen = false
       return { text: 'STRACKZDEVHUB closed.' }
+    }
+    if (verb === 'turns') {
+      // `turns` flips the row; `turns on` / `turns off` set it.
+      const arg = args.split(/\s+/)[1] ?? ''
+      const before = (await getVitals($)).showTurns
+      const showTurns = arg === 'on' ? true : arg === 'off' ? false : !before
+      await updateVitals($, v => ({ ...v, showTurns }))
+      await $.store.set('showTurns', showTurns).catch(logged($, 'showTurns'))
+      return { text: showTurns ? 'STRACKZDEVHUB: turns row on (cost and length of the last turns).' : 'STRACKZDEVHUB: turns row off.' }
     }
     if (verb === 'reset') {
       await updateTouched($, () => ({}))

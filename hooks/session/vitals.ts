@@ -16,6 +16,7 @@ export const DEFAULT_VITALS: Vitals = {
   lastTurnMs: null,
   lastTurnCost: null,
   turns: [],
+  showTurns: false,
 }
 
 export type Usage = {

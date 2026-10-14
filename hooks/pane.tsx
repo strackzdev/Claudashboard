@@ -163,7 +163,12 @@ export const registerPane = (on: On, C: Colors) => {
             ))}
           </Text>
         ) : null}
-        {ts.count > 0 ? (
+        {v.showTurns && ts.count === 0 ? (
+          <Text color={C.dim} wrap="truncate-end">
+            {'turns  none finished yet'}
+          </Text>
+        ) : null}
+        {v.showTurns && ts.count > 0 ? (
           <Text wrap="truncate-end">
             <Text color={C.dim}>{`${ts.count} ${ts.count === 1 ? 'turn ' : 'turns'}  `}</Text>
             {ts.costs ? (
@@ -183,7 +188,7 @@ export const registerPane = (on: On, C: Colors) => {
       </Box>,
       level === 2 ? C.bad : level === 1 ? C.warn : C.frame,
     )
-    const vitalsRows = 2 + 1 + 2 + (v.limits.length > 0 ? 1 : 0) + (ts.count > 0 ? 1 : 0)
+    const vitalsRows = 2 + 1 + 2 + (v.limits.length > 0 ? 1 : 0) + (v.showTurns ? 1 : 0)
 
     // ---- agents: only while some run; each leaves when it finishes
     // Agents give way before the file list drops under 3 rows.

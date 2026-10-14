@@ -25,6 +25,8 @@ export type Vitals = {
   lastTurnCost: number | null
   /** The most recent turns, oldest first, for the sparkline. */
   turns: Turn[]
+  /** Whether the session box draws the turns row: `/strackzdevhub turns`, remembered across sessions. */
+  showTurns: boolean
 }
 
 /** One explorer row; `path` is relative to the root, '/'-separated. */

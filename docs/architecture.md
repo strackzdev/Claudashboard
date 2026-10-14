@@ -17,7 +17,7 @@ flowchart LR
 ```
 
 1. **Events in.** `register.tsx` hooks the engine's events (`session.start`, `turn.*`, `tool.call`, `agent.spawn`, `command.run`, `ui.message`) and hands each to the module that does the work.
-2. **State.** Every value the pane shows lives in an atom in `hooks/state.ts` (`vitals`, `explorer`, `touched`, `agents`, `gitTick`). Writing an atom redraws whatever read it. The atoms' types are the contract in `types/index.d.ts`.
+2. **State.** Every value the pane shows lives in an atom in `hooks/state.ts` (`vitals`, `explorer`, `touched`, `agents`, `activity`, `gitTick`). Writing an atom redraws whatever read it. The atoms' types are the contract in `types/index.d.ts`.
 3. **Drawing.** `pane.tsx` answers `ui.render` for the pane: it reads the atoms and draws three boxes (session, agents, files). It does no I/O.
 4. **The explorer client.** The file box's body is a client module, `explorer/client.tsx`, that runs on the drawing surface. It draws the props `explorer/props.ts` built and posts keys and clicks back as a typed `UiMessage`. It holds no explorer state of its own.
 5. **Keys back in.** `ui.message` reaches `register.tsx`, which runs the pure reducer (`explorer/model.ts` `reduceKey`, or `explorer/editor/editor.ts` `reduceEdit` while editing), writes the next state, and performs the effect the reducer asked for (open, go up, save, mention).
@@ -45,20 +45,20 @@ hooks/
   pane.tsx              ui.render for the pane: session, agents, files
   elapsed.tsx           client module: a timer that ticks without redrawing the pane
 
-  session/vitals.ts     pure: default vitals, a usage report → vitals
+  session/vitals.ts     pure: default vitals, a usage report → vitals, the context alarm level, the turn history
   agents/agents.ts      pure: tool descriptions, step usage, agent defaults
-  shared/format.ts      pure: money, tokens, sizes, times, models, clipping, clamp
+  shared/format.ts      pure: money, tokens, sizes, times, models, clipping, clamp, sparklines
   shared/paths.ts       pure: join, parent, base name, relative, Windows separators
 
   explorer/
     client.tsx          client module: draws the list or the file, posts UiMessage
     props.ts            pure: the props the client draws, from the state
-    model.ts            pure: defaults, sorting, visible rows, the preview, the key reducer
+    model.ts            pure: defaults, sorting, visible rows, the preview, the key reducer, line picks and mentions
     header.ts           pure: fitting the header and breadcrumb to the width
     files.ts            I/O: listings, opening a file, the live refresh, Claude's edits
     editor/editor.ts    pure: keys against the text, cursor, tabs
     editor/editing.ts   I/O: enter, leave, save, undo
-    git/gitdiff.ts      pure: line diff, porcelain and branch parsing
+    git/gitdiff.ts      pure: line diff, the diff view's hunks, porcelain and branch parsing
     git/git.ts          I/O: git status, the gutter's base (HEAD and index)
     media/media.ts      pure: markdown windows, PNG sizes, picture fitting
     media/picture.ts    I/O: PNG as is, other formats converted by ImageMagick or ffmpeg

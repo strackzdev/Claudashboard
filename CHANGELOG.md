@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Context alarm**: from 80% the session box's frame and gauge turn orange with *⚠ filling up*, from 90% red with *⚠ compact soon*. A toast says so once per threshold, and a line under the prompt keeps the percentage in view even with the pane closed; it clears after a compaction.
+- **Turn sparklines**: a `turn` row in the session box draws the last 16 turns' cost (`$ ▁▃█▂`) and length (`⏱ ▂▅▁▃`), with their count and averages.
 - **Touched follows git.** In a git repository, the touched view (`t`), its count and the ✎ marks show what `git status` reports changed right now, whoever made the change: your own edits count, and a file you revert or commit leaves the list. The view refreshes every few seconds like a folder does, and the project bar stays on top. Outside git it still shows the files Claude edited this session.
 - Fix: the session box's mode tag (`auto`, `plan`, …) kept the old mode after a Shift+Tab switch until the next prompt. It now also updates after each tool call, at the end of every turn and when Claude waits for you. Claude Code raises no event for the switch itself, so a switch made while idle shows on your next prompt.
 - Fix: the explorer cursor no longer jumps to another file on a live refresh when dotfiles are hidden or a filter is on.

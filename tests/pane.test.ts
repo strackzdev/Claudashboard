@@ -33,6 +33,50 @@ test('the pane draws the vitals on every surface and width', async ($, on) => {
   }
 })
 
+test('the context alarm: the box warns from 80%, says to compact from 90%, and toasts once per threshold', async ($, on) => {
+  engine(on)
+  const toasts: string[] = []
+  const status: Array<string | undefined> = []
+  on('ui.toast', (_$, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
+  on('ui.status', (_$, e) => {
+    status.push(e.text)
+    return { value: undefined }
+  })
+  on('session.measure', () => ({ changed: [] }))
+  const measure = (percent: number) => $.session.measure({ context: { percent, tokens: percent * 1000, window: 100_000 }, rateLimits: [] } as never)
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await measure(85)
+  expect(await ui.find({ text: /filling up/ })).toBeDefined()
+  await measure(88)
+  await measure(92)
+  expect(await ui.find({ text: /compact soon/ })).toBeDefined()
+  expect(toasts).toEqual(['Context 85% full', 'Context 92% full: run /compact soon'])
+  expect(status.at(-1)).toBe('⚠ context 92%: compact soon')
+  // After a compaction the alarm clears.
+  await measure(30)
+  expect(status.at(-1)).toBe(undefined)
+  expect(await ui.find({ text: /compact soon/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a finished turn adds to the turns row: its length as a sparkline', async ($, on) => {
+  const clock = mock.clock(on)
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  const before = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  expect(await before.find({ text: /^turn $/ })).toBeUndefined()
+  await before.unmount()
+  await $.turn.start({ turnId: 't1', text: 'hello' } as never)
+  await clock.advance(42_000)
+  await $.turn.complete({ turnId: 't1', answer: 'done', durationMs: 42_000, isAborted: false, reason: 'answer' })
+  const after = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  expect(await after.find({ text: /1 turns · avg 0:42/ })).toBeDefined()
+  await after.unmount()
+})
+
 test('the agents section shows while agents run, and leaves with them', async ($, on) => {
   engine(on)
   on('agent.spawn', () => ({ agentId: 'a1', model: 'claude-haiku-5-5' }))

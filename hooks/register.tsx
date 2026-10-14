@@ -2,7 +2,7 @@
 // This module wires the engine's events to the modules that do the work.
 import type { EngineInterface, Register } from 'claude-code'
 import type { Agent, Entry } from '../types'
-import { usageToVitals } from './session/vitals'
+import { contextLevel, pushTurn, usageToVitals } from './session/vitals'
 import { describeTool, normalizeAgent, stepAgent } from './agents/agents'
 import { editMessage, enterEdit, leaveEdit, saveFile } from './explorer/editor/editing'
 import type { UiMessage } from './explorer/client'
@@ -54,10 +54,24 @@ async function initExplorer($: EngineInterface, showHidden: boolean) {
   return loadDir($, '')
 }
 
+/** The context level last announced: each threshold toasts once on the way up, and a compaction resets it. */
+let announced: 0 | 1 | 2 = 0
+
+/** A toast as the context crosses 80% and 90%, and a status line under the prompt while it stays there. */
+function alarmContext($: EngineInterface, pct: number | null) {
+  const level = contextLevel(pct)
+  const n = Math.round(pct ?? 0)
+  if (level > announced) $.ui.toast(level === 2 ? `Context ${n}% full: run /compact soon` : `Context ${n}% full`)
+  if (level > 0) $.ui.status(level === 2 ? `⚠ context ${n}%: compact soon` : `⚠ context ${n}%`)
+  else if (announced > 0) $.ui.status(undefined)
+  announced = level
+}
+
 async function refreshUsage($: EngineInterface) {
   const u = await $.session.usage().catch(() => null)
   if (!u) return
   await updateVitals($, x => ({ ...x, ...usageToVitals(u) }))
+  alarmContext($, u.context?.percent ?? null)
 }
 
 /** The main loop's permission mode, from a classic hook's input; a subagent's events are left out. */
@@ -221,12 +235,14 @@ export const register: Register = (on, options) => {
     const [now, u] = await Promise.all([$.clock.now(), $.session.usage().catch(() => null)])
     await updateVitals($, v => {
       const cost = u?.cost?.usd ?? null
+      const turnCost = cost !== null && v.turnCostStart !== null ? cost - v.turnCostStart : null
       return {
         ...v,
         turnStartedAt: null,
         lastTurnMs: v.turnStartedAt === null ? v.lastTurnMs : now - v.turnStartedAt,
-        lastTurnCost: cost !== null && v.turnCostStart !== null ? cost - v.turnCostStart : v.lastTurnCost,
+        lastTurnCost: turnCost ?? v.lastTurnCost,
         costUsd: cost ?? v.costUsd,
+        turns: v.turnStartedAt === null ? v.turns : pushTurn(v.turns, { ms: now - v.turnStartedAt, cost: turnCost }),
       }
     })
     return done
@@ -234,6 +250,7 @@ export const register: Register = (on, options) => {
 
   on('session.measure', async ($, e, next) => {
     await updateVitals($, x => ({ ...x, ...usageToVitals(e) }))
+    alarmContext($, e.context?.percent ?? null)
     return next(e)
   })
 

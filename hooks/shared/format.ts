@@ -75,3 +75,10 @@ export function modeColorKey(mode: string): 'ok' | 'info' | 'purple' | 'bad' | '
   if (mode === 'bypassPermissions') return 'bad'
   return 'dim'
 }
+
+/** Values as one bar each, `▁` to `█`, scaled to the largest: `[1, 4, 2]` → `▂█▄`. */
+export function sparkline(values: readonly number[]): string {
+  const bars = '▁▂▃▄▅▆▇█'
+  const max = Math.max(0, ...values)
+  return values.map(v => (max > 0 ? (bars[Math.min(7, Math.max(0, Math.round((v / max) * 7)))] ?? '▁') : '▁')).join('')
+}

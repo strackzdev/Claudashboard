@@ -1,5 +1,8 @@
 export type Limit = { kind: string; pct: number }
 
+/** One finished turn of the main loop: how long it ran and what it cost (null when usage was unknown). */
+export type Turn = { ms: number; cost: number | null }
+
 export type Vitals = {
   model: string
   effort: string
@@ -14,6 +17,8 @@ export type Vitals = {
   turnCostStart: number | null
   lastTurnMs: number | null
   lastTurnCost: number | null
+  /** The most recent turns, oldest first, for the sparkline. */
+  turns: Turn[]
 }
 
 /** One explorer row; `path` is relative to the root, '/'-separated. */

@@ -1,10 +1,11 @@
 // The pane's drawing: three boxes from the stored state, the explorer drawn by its client module.
 import type { On } from 'claude-code'
 import type { Palette } from './explorer/client'
-import { EFFORT_LEVEL, clipEnd, fmtDuration, fmtTokens, fmtUsd, gauge, hasLongContext, limitLabel, modeColorKey, prettyModel } from './shared/format'
+import { EFFORT_LEVEL, clipEnd, fmtDuration, fmtTokens, fmtUsd, gauge, hasLongContext, limitLabel, modeColorKey, prettyModel, sparkline } from './shared/format'
 import { bases } from './explorer/git/git'
 import { explorerProps } from './explorer/props'
 import { fitPicture } from './explorer/media/media'
+import { contextLevel, turnSummary } from './session/vitals'
 import { baseName } from './shared/paths'
 import { PANE, getAgents, getExplorer, getTouched, getVitals, paneState, readGitTick, saved } from './state'
 
@@ -79,7 +80,9 @@ export const registerPane = (on: On, C: Colors) => {
     // ---- vitals
     const effortN = EFFORT_LEVEL[v.effort] ?? 0
     const pct = v.pct ?? 0
-    const ctxColor = pct >= 85 ? C.bad : pct >= 70 ? C.warn : C.ok
+    // From 80% the box warns, from 90% it says to compact: frame, gauge and a label beside it.
+    const level = contextLevel(v.pct)
+    const ctxColor = level === 2 ? C.bad : level === 1 ? C.warn : C.ok
     const gaugeW = Math.max(6, Math.min(24, inner - 36))
     const modeColor = C[modeColorKey(v.mode)]
     const isRunning = v.turnStartedAt !== null
@@ -124,6 +127,11 @@ export const registerPane = (on: On, C: Colors) => {
             )}
             {v.tokens !== null && v.window ? <Text color={C.dim}>{`  ${fmtTokens(v.tokens)} / ${fmtTokens(v.window)}`}</Text> : null}
             {v.compactions > 0 ? <Text color={C.dim}>{`  ⟲${v.compactions}`}</Text> : null}
+            {level > 0 ? (
+              <Text color={ctxColor} bold>
+                {level === 2 ? '  ⚠ compact soon' : '  ⚠ filling up'}
+              </Text>
+            ) : null}
           </Text>
           <Text>
             <Text color={C.ok} bold>
@@ -144,9 +152,24 @@ export const registerPane = (on: On, C: Colors) => {
             ))}
           </Text>
         ) : null}
+        {v.turns.length > 0 ? (
+          <Text wrap="truncate-end">
+            <Text color={C.dim}>{'turn '}</Text>
+            {v.turns.some(t => t.cost !== null) ? (
+              <Text>
+                <Text color={C.dim}>{'$ '}</Text>
+                <Text color={C.ok}>{sparkline(v.turns.map(t => t.cost ?? 0))}</Text>
+              </Text>
+            ) : null}
+            <Text color={C.dim}>{'  ⏱ '}</Text>
+            <Text color={C.accent}>{sparkline(v.turns.map(t => t.ms))}</Text>
+            <Text color={C.dim}>{`  ${turnSummary(v.turns)}`}</Text>
+          </Text>
+        ) : null}
       </Box>,
+      level === 2 ? C.bad : level === 1 ? C.warn : C.frame,
     )
-    const vitalsRows = 2 + 1 + 2 + (v.limits.length > 0 ? 1 : 0)
+    const vitalsRows = 2 + 1 + 2 + (v.limits.length > 0 ? 1 : 0) + (v.turns.length > 0 ? 1 : 0)
 
     // ---- agents: only while some run; each leaves when it finishes
     // Agents give way before the file list drops under 3 rows.

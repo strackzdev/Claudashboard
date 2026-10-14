@@ -1,4 +1,4 @@
-// Pure logic for STRACKZDEVHUB: the session's vitals. No `$` here, so it is testable.
+// Pure logic for Claudashboard: the session's vitals. No `$` here, so it is testable.
 import type { Turn, Vitals } from '../../types'
 
 export const DEFAULT_VITALS: Vitals = {

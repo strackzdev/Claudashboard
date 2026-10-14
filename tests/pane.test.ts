@@ -8,11 +8,11 @@ const engine = (on: On) => {
 }
 
 const pane = (bodyColumns: number) => ({
-  plugin: 'strackzdevhub',
+  plugin: 'claudashboard',
   component: 'Pane' as const,
-  requestId: 'strackzdevhub',
+  requestId: 'claudashboard',
   props: {
-    title: 'STRACKZDEVHUB',
+    title: 'CLAUDASHBOARD',
     isFocused: true,
     bodyColumns,
     placement: 'dock' as const,
@@ -62,7 +62,7 @@ test('the context alarm: the box warns from 80%, says to compact from 90%, and t
   await ui.unmount()
 })
 
-test('the turns row is off until /strackzdevhub turns, then shows the finished turns', async ($, on) => {
+test('the turns row is off until /claudashboard turns, then shows the finished turns', async ($, on) => {
   const clock = mock.clock(on)
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
@@ -78,7 +78,7 @@ test('the turns row is off until /strackzdevhub turns, then shows the finished t
   expect(await hidden.find({ text: /^time $/ })).toBeUndefined()
   await hidden.unmount()
 
-  const turnedOn = await $.command.run({ command: 'strackzdevhub', args: 'turns' } as never)
+  const turnedOn = await $.command.run({ command: 'claudashboard', args: 'turns' } as never)
   expect(turnedOn.text).toContain('turns row on')
   // Remembered for the next session.
   expect(stored.showTurns).toBe(true)
@@ -87,7 +87,9 @@ test('the turns row is off until /strackzdevhub turns, then shows the finished t
   expect(await shown.find({ text: / \(avg 0:42\)$/ })).toBeDefined()
   await shown.unmount()
 
-  await $.command.run({ command: 'strackzdevhub', args: 'turns off' } as never)
+  // /cdb is the short form.
+  const turnedOff = await $.command.run({ command: 'cdb', args: 'turns off' } as never)
+  expect(turnedOff.text).toContain('turns row off')
   const off = await $.ui.mount({ ...pane(80), surface: 'terminal' })
   expect(await off.find({ text: /^1 turn/ })).toBeUndefined()
   await off.unmount()

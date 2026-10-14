@@ -1,4 +1,4 @@
-# STRACKZDEVHUB
+# Claudashboard
 
 **A clean hub pane for Claude Code.** It shows the session's vitals, the subagents that are working right now, and a file explorer you drive with the mouse or the keyboard, with a syntax-highlighted preview and a small editor inside the pane.
 
@@ -33,24 +33,24 @@ You need Claude Code **2.1.287 or later**, which is when mods arrived.
 Inside Claude Code:
 
 ```
-/plugin marketplace add strackzdev/claude_strackzdevhub
-/plugin install strackzdevhub@strackzdevhub
-/strackzdevhub
+/plugin marketplace add strackzdev/Claudashboard
+/plugin install claudashboard@claudashboard
+/claudashboard
 ```
 
 <details>
 <summary>From a local clone</summary>
 
 ```sh
-git clone https://github.com/strackzdev/claude_strackzdevhub
-claude plugin marketplace add ./claude_strackzdevhub
-claude plugin install strackzdevhub@strackzdevhub
+git clone https://github.com/strackzdev/Claudashboard
+claude plugin marketplace add ./Claudashboard
+claude plugin install claudashboard@claudashboard
 ```
 
 To try it for a single session without installing it:
 
 ```sh
-claude --plugin-dir ./claude_strackzdevhub
+claude --plugin-dir ./Claudashboard
 ```
 
 </details>
@@ -67,7 +67,7 @@ claude --plugin-dir ./claude_strackzdevhub
 | **Context** | A gauge plus used / window tokens. `⟲n` counts compactions. From 80% the box's frame and gauge turn amber with *⚠ filling up*; from 90% red with *⚠ compact soon*. A toast marks each threshold once, and a line under the prompt keeps the percentage in view with the pane closed. |
 | **Cost** | The session total, plus what the last turn added. |
 | **Limits** | The 5-hour and 7-day rate-limit windows, when your plan reports them. |
-| **Turns** | Off by default; `/strackzdevhub turns` shows it (remembered across sessions). `12 turns  cost ▁▃█▂ $0.21 (avg $0.11)   time ▂▅▁▃ 0:20 (avg 0:14)`: one bar per turn, oldest left and latest right (up to 16), each followed by the latest turn's value and the average. |
+| **Turns** | Off by default; `/claudashboard turns` shows it (remembered across sessions). `12 turns  cost ▁▃█▂ $0.21 (avg $0.11)   time ▂▅▁▃ 0:20 (avg 0:14)`: one bar per turn, oldest left and latest right (up to 16), each followed by the latest turn's value and the average. |
 
 ### Agents
 This section appears only while subagents run. Each running agent gets a card showing:
@@ -116,7 +116,7 @@ A label at the top right of the file box shows the mode: **VIEW MODE** (blue), *
 | `Home` `End` | start of the line's indentation (press again for column 1) / end of line |
 | `PgUp` `PgDn`, `ctrl+Home` `ctrl+End` | page / start and end of the file |
 | click | put the cursor there |
-| `ctrl+s` | save (or run `/strackzdevhub save`) |
+| `ctrl+s` | save (or run `/claudashboard save`) |
 | `ctrl+z` | undo, up to 100 steps per file |
 | `ctrl+e` | back to view mode. With unsaved changes, the first press warns and a second discards them. |
 
@@ -147,7 +147,7 @@ Every line of an open file has a gutter mark, in view mode and edit mode, layere
 
 The footer adds them up, for example `● 2 unsaved  +3 ~2 −1  ✓4 staged`. In the file list, each file shows its git status: `M` modified, `S` or `A` staged, `U` untracked, `D` deleted, `!` conflict. Folders holding changes get a `•`.
 
-Inside a git repository, a project bar sits above the files: `⎇ strackzdevhub  on main ↑2 ↓1` and `3 changed · 1 staged` (or `✓ clean`).
+Inside a git repository, a project bar sits above the files: `⎇ claudashboard  on main ↑2 ↓1` and `3 changed · 1 staged` (or `✓ clean`).
 
 While the pane is open, it refreshes every 3 seconds: files you edit, create or delete in another editor, and `git add` / `commit` run in a terminal, show up on their own. An open file reloads when it changes on disk, or warns you if you have unsaved edits.
 
@@ -161,16 +161,18 @@ Touched files are marked **✎**. In a git repository that means what `git statu
 
 | Command | Does |
 | --- | --- |
-| `/strackzdevhub` | open the hub |
-| `/strackzdevhub close` | close it |
-| `/strackzdevhub save` | save the file being edited |
-| `/strackzdevhub cd <path>` | jump the explorer to a folder: relative to the working directory, or an absolute path inside it (`..` is refused) |
-| `/strackzdevhub reset` | clear Claude's touched files (outside git) and the agents, and move the explorer back to the root |
-| `/strackzdevhub turns [on\|off]` | show or hide the session box's turns row (cost and length of the last turns); remembered across sessions |
+| `/claudashboard` | open the hub |
+| `/claudashboard close` | close it |
+| `/claudashboard save` | save the file being edited |
+| `/claudashboard cd <path>` | jump the explorer to a folder: relative to the working directory, or an absolute path inside it (`..` is refused) |
+| `/claudashboard reset` | clear Claude's touched files (outside git) and the agents, and move the explorer back to the root |
+| `/claudashboard turns [on\|off]` | show or hide the session box's turns row (cost and length of the last turns); remembered across sessions |
+
+`/cdb` is the short form: `/cdb`, `/cdb cd src`, `/cdb turns` and so on.
 
 ## Configure
 
-Open `/config` and find **strackzdevhub**, or set the values under `pluginConfigs.strackzdevhub` in your settings.
+Open `/config` and find **claudashboard**, or set the values under `pluginConfigs.claudashboard` in your settings.
 
 | Option | Default | |
 | --- | --- | --- |
@@ -182,7 +184,7 @@ Open `/config` and find **strackzdevhub**, or set the values under `pluginConfig
 
 - In **fullscreen** at 110 columns or wider, the pane docks beside the transcript. Otherwise it sits inline above the prompt, about 30 rows tall.
 - Every row fits the pane's width: the file path folds its middle folders (`strackz › … › CODEOWNERS`) and then shortens the name, the mode label switches to `VIEW` / `EDIT` / `RO`, and the line count sits at the bottom right.
-- When it gets cramped, close other panes. `/strackzdevhub close` hides STRACKZDEVHUB until you run `/strackzdevhub` again.
+- When it gets cramped, close other panes. `/claudashboard close` hides Claudashboard until you run `/claudashboard` again.
 
 ## Develop
 

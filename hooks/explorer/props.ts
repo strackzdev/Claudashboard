@@ -1,4 +1,4 @@
-// Pure logic for STRACKZDEVHUB: the props the explorer client draws, from the stored state. No `$` here, so it is testable.
+// Pure logic for Claudashboard: the props the explorer client draws, from the stored state. No `$` here, so it is testable.
 import type { Activity, Entry, Explorer } from '../../types'
 import { displayOf, visualCol } from './editor/editor'
 import type { ExplorerProps, GutterMark, Hint, Palette } from './client'

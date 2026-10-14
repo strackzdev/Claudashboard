@@ -1,4 +1,4 @@
-// Pure logic for STRACKZDEVHUB: subagent cards and what their tool calls do. No `$` here, so it is testable.
+// Pure logic for Claudashboard: subagent cards and what their tool calls do. No `$` here, so it is testable.
 import type { Agent } from '../../types'
 import { baseName, toSlash } from '../shared/paths'
 

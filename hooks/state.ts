@@ -8,15 +8,15 @@ import { DEFAULT_VITALS } from './session/vitals'
 import type { Key } from './explorer/model'
 import { isAbsolute, joinPath } from './shared/paths'
 
-export const PANE = 'strackzdevhub'
-export const TITLE = 'STRACKZDEVHUB'
+export const PANE = 'claudashboard'
+export const TITLE = 'CLAUDASHBOARD'
 
-const vitals = atom({ plugin: 'strackzdevhub', key: 'vitals' } as const, DEFAULT_VITALS)
-const explorer = atom({ plugin: 'strackzdevhub', key: 'explorer' } as const, DEFAULT_EXPLORER)
-const touched = atom({ plugin: 'strackzdevhub', key: 'touched' } as const, {})
-const agents = atom({ plugin: 'strackzdevhub', key: 'agents' } as const, [] as Agent[])
-const gitTick = atom({ plugin: 'strackzdevhub', key: 'gitTick' } as const, 0)
-const activity = atom({ plugin: 'strackzdevhub', key: 'activity' } as const, {} as Record<string, Activity>)
+const vitals = atom({ plugin: 'claudashboard', key: 'vitals' } as const, DEFAULT_VITALS)
+const explorer = atom({ plugin: 'claudashboard', key: 'explorer' } as const, DEFAULT_EXPLORER)
+const touched = atom({ plugin: 'claudashboard', key: 'touched' } as const, {})
+const agents = atom({ plugin: 'claudashboard', key: 'agents' } as const, [] as Agent[])
+const gitTick = atom({ plugin: 'claudashboard', key: 'gitTick' } as const, 0)
+const activity = atom({ plugin: 'claudashboard', key: 'activity' } as const, {} as Record<string, Activity>)
 
 export async function getVitals($: EngineInterface): Promise<Vitals> {
   return normalize(DEFAULT_VITALS, await read($, vitals))

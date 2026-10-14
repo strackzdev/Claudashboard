@@ -1,6 +1,6 @@
 # Architecture
 
-STRACKZDEVHUB is a Claude Code mod: one hooks module (`hooks/register.tsx`, named in `hooks/hooks.json`) that the engine loads into an environment of its own, with no DOM and no Node. Everything outside that environment (files, git, the session, drawing) is reached through `$`, the engine interface each hook receives.
+Claudashboard is a Claude Code mod: one hooks module (`hooks/register.tsx`, named in `hooks/hooks.json`) that the engine loads into an environment of its own, with no DOM and no Node. Everything outside that environment (files, git, the session, drawing) is reached through `$`, the engine interface each hook receives.
 
 ## How a frame comes to be
 
@@ -30,7 +30,7 @@ Modules are one of two kinds, and the file header says which:
 
 | Kind | Rule | Tested by |
 | --- | --- | --- |
-| **Pure** (`// Pure logic for STRACKZDEVHUB: …`) | no `$`, no atoms, no I/O; data in, data out | a unit test in the mirrored `tests/` folder |
+| **Pure** (`// Pure logic for Claudashboard: …`) | no `$`, no atoms, no I/O; data in, data out | a unit test in the mirrored `tests/` folder |
 | **I/O** | talks to the engine through `$`; decides as little as possible | `tests/pane.test.ts`, end to end with the engine mocked |
 
 New behaviour goes in a pure function first; the I/O module calls it.
@@ -40,7 +40,7 @@ New behaviour goes in a pure function first; the I/O module calls it.
 ```
 hooks/
   hooks.json            names the hooks module
-  register.tsx          wiring: engine events and /strackzdevhub → the modules below
+  register.tsx          wiring: engine events and /claudashboard → the modules below
   state.ts              the atoms, and every read and update of one
   pane.tsx              ui.render for the pane: session, agents, files
   elapsed.tsx           client module: a timer that ticks without redrawing the pane

@@ -10,14 +10,14 @@ The engine reads the hooks module's source before it runs it, so it can list wha
 2. **`$` is always spelled `$.noun.method(...)`** at the call site, `on` as `on('<event>', hook)`.
 3. **`read` and `update` of an atom happen only in `hooks/state.ts`**, the file that declares it. Other modules call its helpers (`getExplorer`, `updateExplorer`, `setPreview`, `updateAgents`, …). See [ADR 0003](adr/0003-state-in-one-file.md).
 4. **`$.env.get` and `$.env.set` take a string literal** (`$.env.get('TMPDIR')`).
-5. **`types/index.d.ts` stays one self-contained file** with no `import`, declaring every atom under `PluginState['strackzdevhub']`. See [ADR 0004](adr/0004-single-types-contract.md).
+5. **`types/index.d.ts` stays one self-contained file** with no `import`, declaring every atom under `PluginState['claudashboard']`. See [ADR 0004](adr/0004-single-types-contract.md).
 6. **A client module (`Client`) is only ever a child of a `Box`.** Inside a `Text` the engine refuses the whole pane.
 
 `claude plugin validate .` checks most of these without starting a session.
 
 ## Where code goes
 
-- **Pure logic in a pure module, with a test.** A function that decides something (what a key does, what a row shows, how a diff marks lines) takes data and returns data, and lives in a module with no `$`. Its file starts with `// Pure logic for STRACKZDEVHUB: … No \`$\` here, so it is testable.` See [ADR 0002](adr/0002-pure-core-io-shell.md).
+- **Pure logic in a pure module, with a test.** A function that decides something (what a key does, what a row shows, how a diff marks lines) takes data and returns data, and lives in a module with no `$`. Its file starts with `// Pure logic for Claudashboard: … No \`$\` here, so it is testable.` See [ADR 0002](adr/0002-pure-core-io-shell.md).
 - **I/O modules stay thin**: read, call the pure function, write the result.
 - **Folders by feature** ([ADR 0001](adr/0001-feature-folders.md)): explorer code under `hooks/explorer/`, git under `explorer/git/`, and so on. Shared helpers go in `hooks/shared/` only once a second feature needs them.
 - **Tests mirror `hooks/`**: `hooks/explorer/git/gitdiff.ts` is tested by `tests/explorer/git/gitdiff.test.ts`. Behaviour across modules (keys to disk, the drawing) goes in `tests/pane.test.ts`.
@@ -43,4 +43,4 @@ The engine reads the hooks module's source before it runs it, so it can list wha
 
 1. Bump `version` in `.claude-plugin/plugin.json`.
 2. Add a section at the top of `CHANGELOG.md`: `## x.y.z — YYYY-MM-DD`, then bullets written for users (what they see, then **Fix:** items).
-3. Users get it with `claude plugin update strackzdevhub` and `/reload-plugins`.
+3. Users get it with `claude plugin update claudashboard` and `/reload-plugins`.

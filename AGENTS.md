@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for AI coding agents (and people) working on STRACKZDEVHUB, a Claude Code mod: a pane with session vitals, running subagents and a file explorer with an in-pane editor. It runs inside Claude Code's mod environment: no DOM, no Node, no npm packages at run time; everything outside goes through `$`.
+Guidance for AI coding agents (and people) working on Claudashboard, a Claude Code mod: a pane with session vitals, running subagents and a file explorer with an in-pane editor. It runs inside Claude Code's mod environment: no DOM, no Node, no npm packages at run time; everything outside goes through `$`.
 
 ## Read first
 

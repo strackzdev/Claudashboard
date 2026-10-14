@@ -31,7 +31,7 @@ let cacheDir: string | undefined
 async function pictureCache($: EngineInterface): Promise<string> {
   if (cacheDir) return cacheDir
   const tmp = (await $.env.get('TMPDIR')) ?? (await $.env.get('TEMP')) ?? (await $.env.get('TMP')) ?? '/tmp'
-  const dir = `${toSlash(tmp).replace(/\/+$/, '')}/strackzdevhub-pictures`
+  const dir = `${toSlash(tmp).replace(/\/+$/, '')}/claudashboard-pictures`
   // A write makes the folders it needs, so the converter has somewhere to put its file.
   await $.fs.write(`${dir}/.keep`, '')
   cacheDir = dir

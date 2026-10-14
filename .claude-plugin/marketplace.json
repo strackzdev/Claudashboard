@@ -1,14 +1,14 @@
 {
-  "name": "strackzdevhub",
-  "description": "STRACKZDEVHUB, a clean hub pane for Claude Code",
+  "name": "claudashboard",
+  "description": "Claudashboard, a clean hub pane for Claude Code",
   "owner": {
     "name": "strackzdev"
   },
   "plugins": [
     {
-      "name": "strackzdevhub",
+      "name": "claudashboard",
       "source": "./",
-      "description": "STRACKZDEVHUB: a clean hub pane for Claude Code. Session vitals (model, effort, context, cost, rate limits), live subagent cards, and a mouse + keyboard file explorer with in-pane preview"
+      "description": "Claudashboard: a clean hub pane for Claude Code. Session vitals (model, effort, context, cost, rate limits), live subagent cards, and a mouse + keyboard file explorer with in-pane preview"
     }
   ]
 }

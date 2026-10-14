@@ -1,4 +1,4 @@
-// STRACKZDEVHUB: session vitals, running subagents, and a file explorer with an in-pane preview.
+// Claudashboard: session vitals, running subagents, and a file explorer with an in-pane preview.
 // This module wires the engine's events to the modules that do the work.
 import type { EngineInterface, Register } from 'claude-code'
 import type { Agent, Entry } from '../types'
@@ -132,16 +132,21 @@ async function noteSpawn(
   await updateAgents($, list => [...list.filter(a => a.id !== agent.id), agent].slice(-24))
 }
 
+const COMMANDS = ['claudashboard', 'cdb'] as const
+
 export const register: Register = (on, options) => {
   const C = options.palette === 'theme' ? THEME : ONE_DARK
   const showHiddenDefault = options.showHidden === true
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({
-      name: 'strackzdevhub',
-      description: 'STRACKZDEVHUB: open or close the hub, jump the explorer to a folder, show the turns row, or reset it',
-      argumentHint: '[close|cd <path>|save|reset|turns [on|off]]',
-    })
+    // /cdb is the short form of /claudashboard.
+    for (const name of COMMANDS) {
+      await $.command.register({
+        name,
+        description: 'Claudashboard: open or close the hub, jump the explorer to a folder, show the turns row, or reset it',
+        argumentHint: '[close|cd <path>|save|reset|turns [on|off]]',
+      })
+    }
     await Promise.all([refreshUsage($), refreshModel($)]).catch(logged($, 'session vitals'))
     // The turns row is off unless the person turned it on, in this session or an earlier one.
     const showTurns = (await $.store.get('showTurns').catch(() => undefined)) === true
@@ -167,58 +172,59 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('command.run', { command: 'strackzdevhub' }, async ($, e) => {
-    const args = e.args.trim()
-    const [verb = ''] = args.split(/\s+/)
-    if (verb === 'close') {
-      await $.ui.close({ id: PANE })
-      paneState.isOpen = false
-      return { text: 'STRACKZDEVHUB closed.' }
-    }
-    if (verb === 'turns') {
-      // `turns` flips the row; `turns on` / `turns off` set it.
-      const arg = args.split(/\s+/)[1] ?? ''
-      const before = (await getVitals($)).showTurns
-      const showTurns = arg === 'on' ? true : arg === 'off' ? false : !before
-      await updateVitals($, v => ({ ...v, showTurns }))
-      await $.store.set('showTurns', showTurns).catch(logged($, 'showTurns'))
-      return { text: showTurns ? 'STRACKZDEVHUB: turns row on (cost and length of the last turns).' : 'STRACKZDEVHUB: turns row off.' }
-    }
-    if (verb === 'reset') {
-      await updateTouched($, () => ({}))
-      await updateActivity($, () => ({}))
-      await updateAgents($, () => [])
-      await setExplorer($, DEFAULT_EXPLORER)
-      await initExplorer($, showHiddenDefault)
-      return { text: 'STRACKZDEVHUB reset: explorer back at the root, touched files and agents cleared.' }
-    }
-    if (verb === 'save') {
-      const p = (await getExplorer($)).preview
-      if (!p || p.mode !== 'edit') return { text: 'Nothing to save: open a file and press e to edit it.' }
-      await saveFile($)
-      const after = (await getExplorer($)).preview
-      return { text: `STRACKZDEVHUB: ${after?.status ?? 'saved'}` }
-    }
-    if (verb === 'cd') {
-      const ex = await getExplorer($)
-      const target = toSlash(args.slice(2).trim())
-        .replace(/^\.\/?/, '')
-        .replace(/\/+$/, '')
-      const root = ex.root.replace(/\/+$/, '')
-      const rel = target === root ? '' : isAbsolute(target) ? relTo(root, target) : target
-      if (isAbsolute(rel) || rel.split('/').includes('..')) return { text: `${target} is outside ${ex.root}.` }
-      await updateExplorer($, x => ({ ...x, onlyTouched: false, filter: '' }))
-      await loadDir($, rel)
-      const after = await getExplorer($)
-      if (after.error) return { text: `STRACKZDEVHUB: ${after.error}` }
-      await openPane($)
-      return { text: `STRACKZDEVHUB explorer at ./${rel}` }
-    }
-    await refreshModel($)
-    const opened = await openPane($)
-    if (!opened.isPlaced) return { text: `STRACKZDEVHUB is not shown yet: ${opened.reason ?? 'no room'}` }
-    return { text: 'STRACKZDEVHUB open. Click the file list to give it the keyboard; Esc hands it back.' }
-  })
+  for (const command of COMMANDS)
+    on('command.run', { command }, async ($, e) => {
+      const args = e.args.trim()
+      const [verb = ''] = args.split(/\s+/)
+      if (verb === 'close') {
+        await $.ui.close({ id: PANE })
+        paneState.isOpen = false
+        return { text: 'Claudashboard closed.' }
+      }
+      if (verb === 'turns') {
+        // `turns` flips the row; `turns on` / `turns off` set it.
+        const arg = args.split(/\s+/)[1] ?? ''
+        const before = (await getVitals($)).showTurns
+        const showTurns = arg === 'on' ? true : arg === 'off' ? false : !before
+        await updateVitals($, v => ({ ...v, showTurns }))
+        await $.store.set('showTurns', showTurns).catch(logged($, 'showTurns'))
+        return { text: showTurns ? 'Claudashboard: turns row on (cost and length of the last turns).' : 'Claudashboard: turns row off.' }
+      }
+      if (verb === 'reset') {
+        await updateTouched($, () => ({}))
+        await updateActivity($, () => ({}))
+        await updateAgents($, () => [])
+        await setExplorer($, DEFAULT_EXPLORER)
+        await initExplorer($, showHiddenDefault)
+        return { text: 'Claudashboard reset: explorer back at the root, touched files and agents cleared.' }
+      }
+      if (verb === 'save') {
+        const p = (await getExplorer($)).preview
+        if (!p || p.mode !== 'edit') return { text: 'Nothing to save: open a file and press e to edit it.' }
+        await saveFile($)
+        const after = (await getExplorer($)).preview
+        return { text: `Claudashboard: ${after?.status ?? 'saved'}` }
+      }
+      if (verb === 'cd') {
+        const ex = await getExplorer($)
+        const target = toSlash(args.slice(2).trim())
+          .replace(/^\.\/?/, '')
+          .replace(/\/+$/, '')
+        const root = ex.root.replace(/\/+$/, '')
+        const rel = target === root ? '' : isAbsolute(target) ? relTo(root, target) : target
+        if (isAbsolute(rel) || rel.split('/').includes('..')) return { text: `${target} is outside ${ex.root}.` }
+        await updateExplorer($, x => ({ ...x, onlyTouched: false, filter: '' }))
+        await loadDir($, rel)
+        const after = await getExplorer($)
+        if (after.error) return { text: `Claudashboard: ${after.error}` }
+        await openPane($)
+        return { text: `Claudashboard explorer at ./${rel}` }
+      }
+      await refreshModel($)
+      const opened = await openPane($)
+      if (!opened.isPlaced) return { text: `Claudashboard is not shown yet: ${opened.reason ?? 'no room'}` }
+      return { text: 'Claudashboard open. Click the file list to give it the keyboard; Esc hands it back.' }
+    })
 
   // The engine raises nothing when the person switches mode (Shift+Tab), but every classic hook carries
   // the mode: a prompt, each tool call, the end of a turn, and Claude waiting for the person.

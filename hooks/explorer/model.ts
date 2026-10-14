@@ -1,4 +1,4 @@
-// Pure logic for STRACKZDEVHUB: the explorer's state, its preview, and its key reducer. No `$` here, so it is testable.
+// Pure logic for Claudashboard: the explorer's state, its preview, and its key reducer. No `$` here, so it is testable.
 import type { Entry, Explorer, Preview } from '../../types'
 import { clamp, clipEnd, fmtSize } from '../shared/format'
 

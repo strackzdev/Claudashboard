@@ -2,15 +2,16 @@
 
 ## Unreleased
 
+- **Renamed to Claudashboard.** The command is `/claudashboard`, or `/cdb` for short; the plugin installs as `claudashboard@claudashboard` from `strackzdev/Claudashboard`. Settings move to `pluginConfigs.claudashboard`, and the turns row starts hidden again. Uninstall `strackzdevhub` first.
 - **Mention lines**: in the file view, click a line, then shift+click or drag to pick a range (highlighted line numbers and a `┃` bar); `@` inserts `@src/a.ts#10-20`, the form Claude Code's editor extension uses for a selection. Clicking the one picked line again clears it.
 - **Diff view**: `d` on an open file shows its changes as `git diff` does, against the last commit (outside git, against the text as first opened): hunk headers, added lines in green with `+`, removed lines in red with `−`, three lines of context, line numbers. Scroll as usual; `d` or `⌫` goes back to the file where you were.
 - **Live activity in the file tree**: while a turn runs, a file Claude (or a subagent) reads shows **◉** in purple and a file it edits **✎** in yellow, bold, and so does every folder above it. The marks clear when the turn ends, and the git colours show again.
 - **Context alarm**: from 80% the session box's frame and gauge turn orange with *⚠ filling up*, from 90% red with *⚠ compact soon*. A toast says so once per threshold, and a line under the prompt keeps the percentage in view even with the pane closed; it clears after a compaction.
-- **Turn history** (off by default, `/strackzdevhub turns` to show it, remembered across sessions): a row in the session box, `12 turns  cost ▁▃█▂ $0.21 (avg $0.11)   time ▂▅▁▃ 0:20 (avg 0:14)`: one bar per turn (oldest left, latest right, up to 16), each series followed by the latest turn's value and the average.
+- **Turn history** (off by default, `/claudashboard turns` to show it, remembered across sessions): a row in the session box, `12 turns  cost ▁▃█▂ $0.21 (avg $0.11)   time ▂▅▁▃ 0:20 (avg 0:14)`: one bar per turn (oldest left, latest right, up to 16), each series followed by the latest turn's value and the average.
 - **Touched follows git.** In a git repository, the touched view (`t`), its count and the ✎ marks show what `git status` reports changed right now, whoever made the change: your own edits count, and a file you revert or commit leaves the list. The view refreshes every few seconds like a folder does, and the project bar stays on top. Outside git it still shows the files Claude edited this session.
 - Fix: the session box's mode tag (`auto`, `plan`, …) kept the old mode after a Shift+Tab switch until the next prompt. It now also updates after each tool call, at the end of every turn and when Claude waits for you. Claude Code raises no event for the switch itself, so a switch made while idle shows on your next prompt.
 - Fix: the explorer cursor no longer jumps to another file on a live refresh when dotfiles are hidden or a filter is on.
-- Windows: paths with `\` and drive letters work in the explorer, the touched view and `/strackzdevhub cd`; converted pictures go to the system temp folder.
+- Windows: paths with `\` and drive letters work in the explorer, the touched view and `/claudashboard cd`; converted pictures go to the system temp folder.
 
 ## 0.5.0 — 2026-10-13
 

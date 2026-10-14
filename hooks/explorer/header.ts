@@ -1,4 +1,4 @@
-// Pure logic for STRACKZDEVHUB: fitting the file box's header to the pane's width. No `$` here, so it is testable.
+// Pure logic for Claudashboard: fitting the file box's header to the pane's width. No `$` here, so it is testable.
 import { clipMiddle } from '../shared/format'
 
 const SEP = 3 // ' › '

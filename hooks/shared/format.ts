@@ -1,4 +1,4 @@
-// Pure logic for STRACKZDEVHUB: formatting numbers, sizes, times, models and text. No `$` here, so it is testable.
+// Pure logic for Claudashboard: formatting numbers, sizes, times, models and text. No `$` here, so it is testable.
 
 export const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n))
 

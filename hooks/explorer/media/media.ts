@@ -1,4 +1,4 @@
-// Pure logic for STRACKZDEVHUB: markdown and pictures in the preview. No `$` here, so it is testable.
+// Pure logic for Claudashboard: markdown and pictures in the preview. No `$` here, so it is testable.
 
 const MARKDOWN = /\.(md|markdown|mdx)$/i
 const PICTURE = /\.(png|jpe?g|gif|webp|bmp)$/i

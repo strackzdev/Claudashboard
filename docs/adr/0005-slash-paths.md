@@ -8,7 +8,7 @@ On Windows the session's working directory and a tool call's `file_path` arrive 
 
 ## Decision
 
-Inside the mod every path uses `/`. `toSlash` converts a path where it enters (the session's cwd, a tool's `file_path` or `notebook_path`, a `/strackzdevhub cd` argument), and `isAbsolute` recognises `/a` and `C:/a`. The picture cache goes under `TMPDIR`, `TEMP` or `TMP`, created with `$.fs.write`.
+Inside the mod every path uses `/`. `toSlash` converts a path where it enters (the session's cwd, a tool's `file_path` or `notebook_path`, a `/claudashboard cd` argument), and `isAbsolute` recognises `/a` and `C:/a`. The picture cache goes under `TMPDIR`, `TEMP` or `TMP`, created with `$.fs.write`.
 
 ## Consequences
 

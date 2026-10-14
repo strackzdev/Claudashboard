@@ -1,4 +1,4 @@
-// Pure logic for STRACKZDEVHUB: joining and splitting paths. No `$` here, so it is testable.
+// Pure logic for Claudashboard: joining and splitting paths. No `$` here, so it is testable.
 
 export const joinPath = (root: string, rel: string) => (rel ? `${root.replace(/\/+$/, '')}/${rel}` : root)
 

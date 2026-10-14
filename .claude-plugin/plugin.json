@@ -1,13 +1,13 @@
 {
-  "name": "strackzdevhub",
+  "name": "claudashboard",
   "version": "0.5.0",
-  "description": "STRACKZDEVHUB: a clean hub pane for Claude Code. Session vitals (model, effort, context, cost, rate limits), live subagent cards, and a mouse + keyboard file explorer with in-pane preview and editor",
+  "description": "Claudashboard: a clean hub pane for Claude Code. Session vitals (model, effort, context, cost, rate limits), live subagent cards, and a mouse + keyboard file explorer with in-pane preview and editor",
   "author": {
     "name": "strackzdev"
   },
   "license": "MIT",
-  "homepage": "https://github.com/strackzdev/claude_strackzdevhub",
-  "repository": "https://github.com/strackzdev/claude_strackzdevhub",
+  "homepage": "https://github.com/strackzdev/Claudashboard",
+  "repository": "https://github.com/strackzdev/Claudashboard",
   "keywords": [
     "claude-code",
     "claude-code-mod",
@@ -36,7 +36,7 @@
     },
     "openOnStart": {
       "title": "Open on start",
-      "description": "Open the STRACKZDEVHUB pane when a session starts",
+      "description": "Open the Claudashboard pane when a session starts",
       "type": "boolean",
       "default": true
     }

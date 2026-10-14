@@ -25,7 +25,7 @@ export type Vitals = {
   lastTurnCost: number | null
   /** The most recent turns, oldest first, for the sparkline. */
   turns: Turn[]
-  /** Whether the session box draws the turns row: `/strackzdevhub turns`, remembered across sessions. */
+  /** Whether the session box draws the turns row: `/claudashboard turns`, remembered across sessions. */
   showTurns: boolean
 }
 
@@ -121,7 +121,7 @@ export type Agent = {
 
 declare module 'claude-code' {
   interface PluginState {
-    strackzdevhub: {
+    claudashboard: {
       vitals: Vitals
       explorer: Explorer
       touched: Record<string, number>

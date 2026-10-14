@@ -2,7 +2,8 @@
 import type { EngineInterface } from 'claude-code'
 import type { Entry, Explorer, Preview, RepoInfo } from '../../types'
 import { MAX_PREVIEW_BYTES, emptyPreview, previewOf, sortEntries, touchedEntries, visibleEntries } from './model'
-import { bases, fetchBase, gitStatusOf, opened, repoStatus, withGit } from './git/git'
+import { bases, fetchBase, gitStatusOf, opened, repoFiles, repoStatus, withGit } from './git/git'
+import { MAX_FILES } from './finder'
 import { diffRows } from './git/gitdiff'
 import { kindOf } from './media/media'
 import { joinPath, parentOf, relTo, toSlash } from '../shared/paths'
@@ -186,4 +187,41 @@ export async function openDiff($: EngineInterface) {
   const rows = diffRows(base.head, p.lines)
   if (rows.length === 0) return setPreview($, x => ({ ...x, status: base.repo ? 'no changes since the last commit' : 'no changes since the file was opened' }))
   await setPreview($, x => ({ ...x, diff: { rows, fileTop: x.top }, top: 0, status: null }))
+}
+
+/** Folders a walk outside git never enters: they hold thousands of files nobody searches for. */
+const SKIP = new Set(['.git', 'node_modules', 'dist', 'build', 'target', '.venv', '__pycache__'])
+
+/** Every file under the root outside git, folder by folder, dotfolders only with dotfiles shown; at most MAX_FILES. */
+async function walkFiles($: EngineInterface, root: string, showHidden: boolean): Promise<string[]> {
+  const files: string[] = []
+  const queue = ['']
+  while (queue.length && files.length < MAX_FILES) {
+    const dir = queue.shift() ?? ''
+    const raw = await $.fs.list(joinPath(root, dir)).catch(() => [])
+    for (const r of raw) {
+      if (SKIP.has(r.name) || (!showHidden && r.name.startsWith('.'))) continue
+      const path = dir ? `${dir}/${r.name}` : r.name
+      // A symbolic link lists as `other`: walk or list it as what it leads to.
+      const kind = r.isLink ? ((await $.fs.stat(joinPath(root, path)).catch(() => null))?.kind ?? null) : r.kind
+      if (kind === 'dir' && !r.isLink) queue.push(path)
+      else if (kind === 'file') files.push(path)
+    }
+  }
+  return files.slice(0, MAX_FILES)
+}
+
+/** Opens the fuzzy finder, then fills in the files it searches: git's list in a repository, else a walk. */
+export async function openFinder($: EngineInterface) {
+  const ex = await getExplorer($)
+  await updateExplorer($, x => ({ ...x, isFiltering: false, finder: { query: '', cursor: 0, files: x.finder?.files ?? [], isLoading: true } }))
+  const files = ((await repoFiles($, ex.root)) ?? (await walkFiles($, ex.root, ex.showHidden))).slice(0, MAX_FILES)
+  await updateExplorer($, x => (x.finder ? { ...x, finder: { ...x.finder, files, isLoading: false } } : x))
+}
+
+/** Opens a file the finder picked: its folder listed with the cursor on it, then the file itself. */
+export async function openFound($: EngineInterface, path: string) {
+  await updateExplorer($, x => ({ ...x, finder: null, onlyTouched: false, filter: '' }))
+  await loadDir($, parentOf(path), path)
+  await loadPreview($, path)
 }

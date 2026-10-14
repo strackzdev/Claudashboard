@@ -95,14 +95,10 @@ test('the turns row is off until /claudashboard turns, then shows the finished t
   await off.unmount()
 })
 
-test('the agents section shows while agents run, and leaves with them', async ($, on) => {
+test('the agents tab: running agents, then the finished history; Tab and a click switch tabs', async ($, on) => {
   engine(on)
   on('agent.spawn', () => ({ agentId: 'a1', model: 'claude-haiku-5-5' }))
   on('turn.complete', () => ({ text: '' }))
-  const before = await $.ui.mount({ ...pane(80), surface: 'terminal' })
-  expect(await before.find({ text: /^AGENTS/ })).toBeUndefined()
-  await before.unmount()
-
   await $.agent.spawn({
     prompt: 'Find the auth middleware',
     description: 'Find the auth middleware',
@@ -113,15 +109,68 @@ test('the agents section shows while agents run, and leaves with them', async ($
     background: false,
     fork: false,
   })
-  const during = await $.ui.mount({ ...pane(80), surface: 'terminal' })
-  expect(await during.find({ text: /AGENTS · 1 running/ })).toBeDefined()
-  expect(await during.find({ text: /Find the auth middleware/ })).toBeDefined()
-  await during.unmount()
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  // The files tab shows; the agents tab counts the running one.
+  expect((await explorerProps(ui)).running).toBe(1)
+  expect((await explorerProps(ui)).body).toBe('files')
+  await ui.key({ key: 'tab', in: 'explorer' })
+  const during = await explorerProps(ui)
+  expect(during.body).toBe('agents')
+  expect(JSON.stringify(during.agents)).toContain('Find the auth middleware')
+  expect((during.agents as Array<{ kind: string }>).some(l => l.kind === 'run')).toBe(true)
+  expect(await ui.find({ text: /^RUNNING · 1$/, in: 'explorer' })).toBeDefined()
+  expect(await ui.find({ text: /^ . AGENTS \(1\) $/, in: 'explorer' })).toBeDefined()
+  // The project bar is the files tab's alone.
+  expect(await ui.find({ text: /^⎇ $/, in: 'explorer' })).toBeUndefined()
 
   await $.turn.complete({ answer: 'found it', durationMs: 1000, isAborted: false, turnId: 't1', agentId: 'a1', reason: 'answer' })
-  const after = await $.ui.mount({ ...pane(80), surface: 'terminal' })
-  expect(await after.find({ text: /^AGENTS/ })).toBeUndefined()
-  await after.unmount()
+  const after = await explorerProps(ui)
+  expect(after.running).toBe(0)
+  expect((after.agents as Array<{ kind: string; name?: string }>).filter(l => l.kind === 'done').map(l => l.name)).toEqual(['Explore'])
+  // c clears the history; a click on the files tab goes back.
+  await ui.key({ key: 'c', in: 'explorer' })
+  expect((await explorerProps(ui)).agents as Array<{ kind: string }>).not.toContainEqual(expect.objectContaining({ kind: 'done' }))
+  // The tabs sit at the right of an 80-column pane: │ FILES │ AGENTS │ from column 62.
+  await ui.pointer({ type: 'down', x: 65, y: 1, button: 'left', in: 'explorer' })
+  expect((await explorerProps(ui)).body).toBe('files')
+  await ui.unmount()
+})
+
+test('? shows the help over the body; any other key closes it', async ($, on) => {
+  engine(on)
+  disk(on, { '/w/a.ts': 'x\n' })
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await ui.key({ key: '?', in: 'explorer' })
+  const help = await explorerProps(ui)
+  expect(help.body).toBe('help')
+  expect((help.help as Array<{ kind: string; text?: string }>)[0]).toEqual({ kind: 'title', text: 'File list' })
+  expect(await ui.find({ text: /^File list$/, in: 'explorer' })).toBeDefined()
+  await ui.key({ key: 'x', in: 'explorer' })
+  expect((await explorerProps(ui)).body).toBe('files')
+  await ui.unmount()
+})
+
+test('f opens the finder: typing narrows the files, Enter opens the pick in its folder', async ($, on) => {
+  engine(on)
+  const files: Record<string, string> = { '/w/src/auth/middleware.ts': 'export {}\n', '/w/src/main.ts': 'main\n', '/w/README.md': '# r\n' }
+  disk(on, files)
+  // Outside git (the test's process runner fails), the finder walks the folders.
+  on('process.run', () => ({ value: { exitCode: 1, stdout: '', stderr: 'not a repo', isStdoutTruncated: false, isStderrTruncated: false } }))
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  await ui.key({ key: 'f', in: 'explorer' })
+  expect((await explorerProps(ui)).body).toBe('finder')
+  for (const ch of 'midw') await ui.key({ key: ch, in: 'explorer' })
+  const found = (await explorerProps(ui)).found as Array<{ path: string }>
+  expect(found.map(r => r.path)).toEqual(['src/auth/middleware.ts'])
+  expect(await ui.find({ text: /^mid$/, in: 'explorer' })).toBeDefined()
+  await ui.key({ key: 'return', in: 'explorer' })
+  const opened = await explorerProps(ui)
+  expect(opened.body).toBe('files')
+  expect(opened.mode).toBe('preview')
+  expect(opened.crumbs).toContain('middleware.ts')
+  await ui.unmount()
 })
 
 // ---------------------------------------------------------------- editing, end to end
@@ -131,9 +180,18 @@ const disk = (on: On, files: Record<string, string>) => {
   const mtimes: Record<string, number> = Object.fromEntries(Object.keys(files).map(f => [f, 1000]))
   on('session.cwd', () => ({ value: '/w' }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
-  on('fs.list', () => ({
-    value: Object.keys(files).map(name => ({ name: name.slice(3), kind: 'file' as const, size: files[name]?.length ?? 0, mtimeMs: 1000, isLink: false })),
-  }))
+  // A folder lists what its files' paths hold under it: files, and folders for deeper paths.
+  on('fs.list', (_$, e) => {
+    const under = new Map<string, 'file' | 'dir'>()
+    for (const f of Object.keys(files)) {
+      if (!f.startsWith(`${e.path}/`)) continue
+      const [head = '', ...rest] = f.slice(e.path.length + 1).split('/')
+      under.set(head, rest.length ? 'dir' : 'file')
+    }
+    return {
+      value: [...under].map(([name, kind]) => ({ name, kind, size: files[`${e.path}/${name}`]?.length ?? 0, mtimeMs: 1000, isLink: false })),
+    }
+  })
   on('fs.stat', (_$, e) => ({ value: { kind: 'file' as const, size: files[e.path]?.length ?? 0, mtimeMs: mtimes[e.path] ?? 0, isLink: false } }))
   on('fs.read', (_$, e) => ({ value: files[e.path] ?? '' }))
   on('fs.write', (_$, e) => {
@@ -253,6 +311,11 @@ test('in a repo, the list shows git letters and the file shows its changed lines
   const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
   const listed = await explorerProps(ui)
   expect((listed.rows as Array<{ git: unknown }>)[0]?.git).toEqual({ letter: 'M', tone: 'modified' })
+  // The project bar sits left of the tabs on the files tab, and leaves on the agents tab.
+  expect(await ui.find({ text: /^⎇ $/, in: 'explorer' })).toBeDefined()
+  await ui.key({ key: 'tab', in: 'explorer' })
+  expect(await ui.find({ text: /^⎇ $/, in: 'explorer' })).toBeUndefined()
+  await ui.key({ key: 'tab', in: 'explorer' })
   await ui.key({ key: 'return', in: 'explorer' })
   const viewed = await explorerProps(ui)
   expect(viewed.gutter).toEqual([null, { glyph: '▌', tone: 'modified' }, null])
@@ -339,19 +402,19 @@ test('pick lines in the file view with a click and shift+click (or a drag), then
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
   await ui.key({ key: 'return', in: 'explorer' })
-  // Rows 0 and 1 are the header and the rule: the file's first line is row 2.
-  await ui.pointer({ type: 'down', x: 8, y: 3, button: 'left', in: 'explorer' })
-  await ui.pointer({ type: 'down', x: 8, y: 4, button: 'left', shift: true, in: 'explorer' })
+  // Rows 0 to 4 are the tab strip, the box's top border, the header and the rule: the file's first line is row 5.
+  await ui.pointer({ type: 'down', x: 10, y: 6, button: 'left', in: 'explorer' })
+  await ui.pointer({ type: 'down', x: 10, y: 7, button: 'left', shift: true, in: 'explorer' })
   expect((await explorerProps(ui)).selection).toEqual([2, 3])
   await ui.key({ key: '@', in: 'explorer' })
   expect(filled).toBe('@a.ts#2-3 ')
   // A drag picks from where it started.
-  await ui.pointer({ type: 'down', x: 8, y: 2, button: 'left', in: 'explorer' })
-  await ui.pointer({ type: 'move', x: 8, y: 5, button: 'left', in: 'explorer' })
+  await ui.pointer({ type: 'down', x: 10, y: 5, button: 'left', in: 'explorer' })
+  await ui.pointer({ type: 'move', x: 10, y: 8, button: 'left', in: 'explorer' })
   expect((await explorerProps(ui)).selection).toEqual([1, 4])
   // Clicking the one picked line again clears the pick.
-  await ui.pointer({ type: 'down', x: 8, y: 6, button: 'left', in: 'explorer' })
-  await ui.pointer({ type: 'down', x: 8, y: 6, button: 'left', in: 'explorer' })
+  await ui.pointer({ type: 'down', x: 10, y: 9, button: 'left', in: 'explorer' })
+  await ui.pointer({ type: 'down', x: 10, y: 9, button: 'left', in: 'explorer' })
   expect((await explorerProps(ui)).selection).toBe(null)
   await ui.unmount()
 })

@@ -96,3 +96,11 @@ export async function refreshGit($: EngineInterface) {
   const { entries, repo } = await gitStatusOf($, ex.root, ex.dir, ex.entries)
   await updateExplorer($, cur => (cur.dir === ex.dir ? { ...cur, entries, repo } : cur))
 }
+
+/** Every file git knows under `root` (tracked, and untracked but not ignored), as paths from it; null outside git. */
+// ponytail: a tracked file deleted on disk (or a submodule) still lists; opening it says it cannot be read. Filter with `ls-files --deleted` if that bothers anyone.
+export async function repoFiles($: EngineInterface, root: string): Promise<string[] | null> {
+  const r = await git($, root, ['-c', 'core.quotePath=false', 'ls-files', '--cached', '--others', '--exclude-standard'])
+  if (r.exitCode !== 0) return null
+  return [...new Set(r.stdout.split('\n').filter(Boolean))]
+}

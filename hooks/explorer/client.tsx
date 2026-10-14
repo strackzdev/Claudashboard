@@ -2,6 +2,9 @@
 // It holds no explorer state of its own; a click inside gives it the keyboard, Esc hands it back.
 import type { ClientModule } from 'claude-code'
 import type { DiffRow } from '../../types'
+import type { AgentLine } from '../agents/view'
+import type { HelpLine } from '../help'
+import { agentsBody, finderBody, framed, helpBody, tabAt, tabStrip } from './views'
 
 export type GitLetter = { letter: string; tone: 'staged' | 'modified' | 'untracked' | 'deleted' | 'conflict' }
 
@@ -35,6 +38,7 @@ export type Palette = {
   ok: string
   bad: string
   purple: string
+  info: string
 }
 
 export type Hint = { key: string; label: string }
@@ -46,6 +50,8 @@ export type UiMessage =
   | { k: 'place'; row: number; vis: number; room: number }
   | { k: 'click'; index: number; room: number }
   | { k: 'line'; row: number; isExtend: boolean; room: number }
+  | { k: 'tab'; tab: 'files' | 'agents'; room: number }
+  | { k: 'pick'; index: number; room: number }
 
 export type ExplorerProps = {
   mode: 'list' | 'preview'
@@ -81,7 +87,24 @@ export type ExplorerProps = {
   selection: [number, number] | null
   /** The diff view's rows in view: hunk headers, shared lines, removed and added lines. */
   diff: DiffRow[] | null
+  /** The tab bar: which tab shows, how many agents run, and the project bar at its right (in a repository). */
+  tab?: 'files' | 'agents'
+  running?: number
+  repo?: RepoBar | null
+  /** What the body draws: the files (list or file), the agents tab, the finder, or the help. */
+  body?: 'files' | 'agents' | 'finder' | 'help'
+  /** The box's frame colour: it says which tab or mode shows. */
+  frame?: string
+  /** The clock when drawn: running agents' timers tick on from it. */
+  now?: number
+  agents?: AgentLine[] | null
+  help?: HelpLine[] | null
+  found?: FoundRow[] | null
 }
+
+export type RepoBar = { name: string; branch: string; ahead: number; behind: number; changed: number; staged: number }
+/** One finder result: its path, the matched letters' places in it, and whether it is picked. */
+export type FoundRow = { path: string; hits: number[]; isSelected: boolean }
 
 export type EditView = {
   lines: string[]
@@ -93,12 +116,17 @@ export type EditView = {
   textW: number
 }
 
-/** The props as last drawn, and the line a drag last reached (so a drag posts once per line). */
-type Ref = { props: ExplorerProps; dragRow?: number | null }
+/** The props as last drawn, the line a drag last reached (so a drag posts once per line), and the seconds ticked since `now`. */
+type Ref = { props: ExplorerProps; dragRow?: number | null; ticks: number; lastNow: number }
 type State = { ref: Ref }
 
-/** Rows above the list: the breadcrumb and a rule. */
+/** Rows above the list, inside the box: the breadcrumb and a rule. */
 const HEAD = 2
+/** Where the box's inside starts in the region: the two rows of the tab strip and the top border down, the border and padding across. */
+const TOP = 3
+/** While agents run, the client ticks this often: the agents tab's spinner turns and their timers count. */
+const TICK_MS = 200
+const LEFT = 2
 
 const FALLBACK: Palette = {
   accent: 'claude',
@@ -113,6 +141,7 @@ const FALLBACK: Palette = {
   ok: 'success',
   bad: 'error',
   purple: 'permission',
+  info: 'suggestion',
 }
 
 /** Props as they may arrive: from an older load of the hooks module, or partial. Never throws. */
@@ -145,23 +174,60 @@ function complete(raw: Partial<ExplorerProps> | null | undefined): ExplorerProps
     edit: p.edit && Array.isArray(p.edit.lines) ? p.edit : null,
     diff: Array.isArray(p.diff) ? p.diff : null,
     selection: Array.isArray(p.selection) && p.selection.length === 2 ? p.selection : null,
+    tab: p.tab === 'agents' ? 'agents' : 'files',
+    running: typeof p.running === 'number' ? p.running : 0,
+    repo: p.repo && typeof p.repo.name === 'string' ? p.repo : null,
+    body: p.body === 'agents' || p.body === 'finder' || p.body === 'help' ? p.body : 'files',
+    now: typeof p.now === 'number' ? p.now : 0,
+    frame: typeof p.frame === 'string' ? p.frame : undefined,
+    agents: Array.isArray(p.agents) ? p.agents : null,
+    help: Array.isArray(p.help) ? p.help : null,
+    found: Array.isArray(p.found) ? p.found : null,
   }
 }
 
 const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
   const { Box, Text, Code, Markdown } = surface.elements
   const props = complete(rawProps)
-  const ref = surface.state?.ref ?? { props }
+  const ref = surface.state?.ref ?? { props, ticks: 0, lastNow: -1 }
   ref.props = props
+  if (props.now !== ref.lastNow) {
+    ref.lastNow = props.now ?? 0
+    ref.ticks = 0
+  }
 
   if (surface.state === undefined) {
     surface.setState({ ref })
     const post = (m: UiMessage) => surface.post(m)
+    // While agents run, the client ticks: the agents tab's spinner turns and their timers count, with no redraw of the pane.
+    surface.every(TICK_MS, () => {
+      if (!ref.props.running) return
+      ref.ticks += 1
+      surface.setState({ ref })
+    })
     surface.onKey(k => {
       post({ k: 'key', key: k.key, ctrl: k.ctrl ?? false, meta: k.meta ?? false, room: ref.props.room })
     })
-    surface.onPointer(p => {
+    surface.onPointer(raw => {
       const cur = ref.props
+      // The tab strip: a click on a tab shows it.
+      if (raw.y < TOP - 1) {
+        const tab = raw.type === 'down' && raw.button === 'left' ? tabAt(raw.x, Math.max(20, cur.width) + 2 * LEFT, cur.running ?? 0) : null
+        if (tab) post({ k: 'tab', tab, room: cur.room })
+        return
+      }
+      // From here on, places inside the box.
+      const p = { ...raw, x: raw.x - LEFT, y: raw.y - TOP }
+      if (cur.body === 'finder') {
+        const i = p.y - HEAD
+        if (p.type === 'down' && p.button === 'left' && i >= 0 && i < (cur.found ?? []).length) post({ k: 'pick', index: cur.top + i, room: cur.room })
+        else if (p.type === 'down' && p.button === 'left' && p.y === 0) post({ k: 'crumb', room: cur.room })
+        return
+      }
+      if (cur.body !== 'files') {
+        if (p.type === 'down' && p.button === 'left' && p.y === 0) post({ k: 'crumb', room: cur.room })
+        return
+      }
       // In the file view, a press picks a line and a drag (or shift+click) stretches the pick.
       const codeRow = p.y - HEAD - (cur.note ? 1 : 0)
       const isOnCode = cur.code !== null && !cur.edit && codeRow >= 0 && codeRow < cur.code.source.split('\n').length
@@ -409,39 +475,56 @@ const Explorer: ClientModule<ExplorerProps, State> = (rawProps, surface) => {
   )
 
   return (
-    <Box flexDirection="column" width={W}>
-      {crumbs}
-      <Text color={c.dim}>{'─'.repeat(W)}</Text>
-      {props.mode === 'list' ? list : preview}
-      <Box flexDirection="row" justifyContent="space-between" width={W}>
-        <Box flexShrink={1}>
-          <Text wrap="truncate-end">
-            {props.hints.map((hint, i) => (
-              <Text>
-                {i > 0 ? <Text color={c.dim}>{'  '}</Text> : null}
-                <Text color={c.accent} bold>
-                  {hint.key}
-                </Text>
-                <Text color={c.dim}>{` ${hint.label}`}</Text>
+    <Box flexDirection="column" width={W + 2 * LEFT}>
+      {tabStrip(surface.elements, props, W + 2 * LEFT, ref.ticks)}
+      {framed(
+        surface.elements,
+        props,
+        W + 2 * LEFT,
+        props.room + HEAD + 1,
+        <Box flexDirection="column" width={W}>
+          {crumbs}
+          <Text color={c.dim}>{'─'.repeat(W)}</Text>
+          {props.body === 'agents'
+            ? agentsBody(surface.elements, props, W, ref.ticks * TICK_MS)
+            : props.body === 'help'
+              ? helpBody(surface.elements, props)
+              : props.body === 'finder'
+                ? finderBody(surface.elements, props, W)
+                : props.mode === 'list'
+                  ? list
+                  : preview}
+          <Box flexDirection="row" justifyContent="space-between" width={W}>
+            <Box flexShrink={1}>
+              <Text wrap="truncate-end">
+                {props.hints.map((hint, i) => (
+                  <Text>
+                    {i > 0 ? <Text color={c.dim}>{'  '}</Text> : null}
+                    <Text color={c.accent} bold>
+                      {hint.key}
+                    </Text>
+                    <Text color={c.dim}>{` ${hint.label}`}</Text>
+                  </Text>
+                ))}
               </Text>
-            ))}
-          </Text>
-        </Box>
-        {props.counter || ch ? (
-          <Box flexShrink={0} marginLeft={2}>
-            <Text>
-              {ch && ch.unsaved ? <Text color={c.warn}>{`● ${ch.unsaved} unsaved  `}</Text> : null}
-              {ch && ch.added ? <Text color={c.ok}>{`+${ch.added} `}</Text> : null}
-              {ch && ch.modified ? <Text color={c.accent}>{`~${ch.modified} `}</Text> : null}
-              {ch && ch.deleted ? <Text color={c.bad}>{`−${ch.deleted} `}</Text> : null}
-              {ch && ch.staged ? <Text color={c.purple}>{`✓${ch.staged} staged `}</Text> : null}
-              {ch && !ch.repo && (ch.added || ch.modified || ch.deleted) ? <Text color={c.dim}>{'since opened '}</Text> : null}
-              {ch && (ch.unsaved || ch.added || ch.modified || ch.deleted || ch.staged) ? <Text color={c.dim}> </Text> : null}
-              <Text color={c.dim}>{props.counter}</Text>
-            </Text>
+            </Box>
+            {props.counter || ch ? (
+              <Box flexShrink={0} marginLeft={2}>
+                <Text>
+                  {ch && ch.unsaved ? <Text color={c.warn}>{`● ${ch.unsaved} unsaved  `}</Text> : null}
+                  {ch && ch.added ? <Text color={c.ok}>{`+${ch.added} `}</Text> : null}
+                  {ch && ch.modified ? <Text color={c.accent}>{`~${ch.modified} `}</Text> : null}
+                  {ch && ch.deleted ? <Text color={c.bad}>{`−${ch.deleted} `}</Text> : null}
+                  {ch && ch.staged ? <Text color={c.purple}>{`✓${ch.staged} staged `}</Text> : null}
+                  {ch && !ch.repo && (ch.added || ch.modified || ch.deleted) ? <Text color={c.dim}>{'since opened '}</Text> : null}
+                  {ch && (ch.unsaved || ch.added || ch.modified || ch.deleted || ch.staged) ? <Text color={c.dim}> </Text> : null}
+                  <Text color={c.dim}>{props.counter}</Text>
+                </Text>
+              </Box>
+            ) : null}
           </Box>
-        ) : null}
-      </Box>
+        </Box>,
+      )}
     </Box>
   )
 }

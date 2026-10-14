@@ -17,10 +17,10 @@ flowchart LR
 ```
 
 1. **Events in.** `register.tsx` hooks the engine's events (`session.start`, `turn.*`, `tool.call`, `agent.spawn`, `command.run`, `ui.message`) and hands each to the module that does the work.
-2. **State.** Every value the pane shows lives in an atom in `hooks/state.ts` (`vitals`, `explorer`, `touched`, `agents`, `activity`, `gitTick`). Writing an atom redraws whatever read it. The atoms' types are the contract in `types/index.d.ts`.
-3. **Drawing.** `pane.tsx` answers `ui.render` for the pane: it reads the atoms and draws three boxes (session, agents, files). It does no I/O.
-4. **The explorer client.** The file box's body is a client module, `explorer/client.tsx`, that runs on the drawing surface. It draws the props `explorer/props.ts` built and posts keys and clicks back as a typed `UiMessage`. It holds no explorer state of its own.
-5. **Keys back in.** `ui.message` reaches `register.tsx`, which runs the pure reducer (`explorer/model.ts` `reduceKey`, or `explorer/editor/editor.ts` `reduceEdit` while editing), writes the next state, and performs the effect the reducer asked for (open, go up, save, mention).
+2. **State.** Every value the pane shows lives in an atom in `hooks/state.ts` (`vitals`, `explorer`, `touched`, `agents`, `activity`, `view`, `gitTick`). Writing an atom redraws whatever read it. The atoms' types are the contract in `types/index.d.ts`.
+3. **Drawing.** `pane.tsx` answers `ui.render` for the pane: it reads the atoms and draws two boxes (session, and the tabbed body). It does no I/O.
+4. **The body client.** The second box's body is a client module, `explorer/client.tsx`, that runs on the drawing surface. It draws the tab bar and whichever body shows (the files, the agents tab, the finder or the help, from `explorer/views.tsx`) from the props `explorer/props.ts` `bodyProps` built, and posts keys and clicks back as a typed `UiMessage`. It holds no state of its own beyond the running agents' ticking timers. One client draws every tab so the keyboard focus stays when the tab changes ([ADR 0007](adr/0007-one-client-for-every-tab.md)).
+5. **Keys back in.** `ui.message` reaches `register.tsx`, which routes the key: the help (`help.ts` `reduceHelp`) when it shows, `Tab` and `?`, the agents tab (`agents/view.ts` `reduceAgentsKey`), the finder (`explorer/finder.ts` `reduceFinder`), the editor (`explorer/editor/editor.ts` `reduceEdit`) or the explorer (`explorer/model.ts` `reduceKey`). It writes the next state and performs the effect the reducer asked for (open, go up, save, mention, find).
 
 A 3-second timer (`files.ts` `poll`) refreshes the folder listing, git status and the open file while the pane is open.
 
@@ -44,18 +44,22 @@ hooks/
   state.ts              the atoms, and every read and update of one
   pane.tsx              ui.render for the pane: session, agents, files
   elapsed.tsx           client module: a timer that ticks without redrawing the pane
+  help.ts               pure: the help overlay's keys, ordered by where it opened, and its scrolling
 
   session/vitals.ts     pure: default vitals, a usage report → vitals, the context alarm level, the turn history
-  agents/agents.ts      pure: tool descriptions, step usage, agent defaults
+  agents/agents.ts      pure: tool descriptions, step usage, agent defaults, the finished history
+  agents/view.ts        pure: the agents tab's lines and keys
   shared/format.ts      pure: money, tokens, sizes, times, models, clipping, clamp, sparklines
   shared/paths.ts       pure: join, parent, base name, relative, Windows separators
 
   explorer/
-    client.tsx          client module: draws the list or the file, posts UiMessage
+    client.tsx          client module: the tab bar and the body, posts UiMessage
+    views.tsx           drawn by the client: the tab bar, the agents tab, the finder, the help
     props.ts            pure: the props the client draws, from the state
+    finder.ts           pure: fuzzy matching and ranking, the finder's keys
     model.ts            pure: defaults, sorting, visible rows, the preview, the key reducer, line picks and mentions
     header.ts           pure: fitting the header and breadcrumb to the width
-    files.ts            I/O: listings, opening a file, the live refresh, Claude's edits
+    files.ts            I/O: listings, opening a file, the live refresh, Claude's edits, the finder's file list
     editor/editor.ts    pure: keys against the text, cursor, tabs
     editor/editing.ts   I/O: enter, leave, save, undo
     git/gitdiff.ts      pure: line diff, the diff view's hunks, porcelain and branch parsing
@@ -81,3 +85,4 @@ The reasons behind the shape are in [`docs/adr/`](adr/):
 - [0004](adr/0004-single-types-contract.md): one self-contained types contract
 - [0005](adr/0005-slash-paths.md): `/` paths inside, converted where they come in
 - [0006](adr/0006-touched-follows-git.md): touched follows `git status` inside a repository
+- [0007](adr/0007-one-client-for-every-tab.md): one client module draws every tab

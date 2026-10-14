@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Tabs: FILES and AGENTS.** The body under the session box is now two tabs. Click one, or press `Tab` (`/claudashboard files` / `agents` from the prompt). The agents tab badge counts running agents (`⠹ AGENTS (2)`, its spinner turning while they work), the tabs sit on the box's top right edge, and the project bar moved beside them (files tab only).
+- **Agent history.** The agents tab keeps finished agents below the running ones, newest first, with their steps, tools, context, task and how long they ran: the last 20; `c` clears them. Running cards no longer push the file list down.
+- **Fuzzy file finder.** `f` or `ctrl+p` finds any file under the working directory by letters of its path (git's files in a repository, a folder walk elsewhere), the matched letters highlighted; `⏎` or a click opens it.
+- **Help.** `?` shows every key, the current view's first. The hint lines now show only the main keys.
 - **Renamed to Claudashboard.** The command is `/claudashboard`, or `/cdb` for short; the plugin installs as `claudashboard@claudashboard` from `strackzdev/Claudashboard`. Settings move to `pluginConfigs.claudashboard`, and the turns row starts hidden again. Uninstall `strackzdevhub` first.
 - **Mention lines**: in the file view, click a line, then shift+click or drag to pick a range (highlighted line numbers and a `┃` bar); `@` inserts `@src/a.ts#10-20`, the form Claude Code's editor extension uses for a selection. Clicking the one picked line again clears it.
 - **Diff view**: `d` on an open file shows its changes as `git diff` does, against the last commit (outside git, against the text as first opened): hunk headers, added lines in green with `+`, removed lines in red with `−`, three lines of context, line numbers. Scroll as usual; `d` or `⌫` goes back to the file where you were.

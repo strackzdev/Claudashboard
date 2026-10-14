@@ -40,5 +40,31 @@ export function normalizeAgent(a: Partial<Agent> & { id: string }): Agent {
     lastTool: '',
     isBackground: false,
     ...a,
+    endedAt: a.endedAt ?? null,
   }
+}
+
+/** Finished agents kept in the history, and running ones kept (one whose end never came stays until it is pushed out). */
+export const MAX_FINISHED = 20
+export const MAX_RUNNING = 24
+
+/** The list to store: the most recent running and finished agents, in their order. */
+export function keepAgents(list: Agent[]): Agent[] {
+  const oldest = (xs: Agent[], keep: number) => xs.slice(0, Math.max(0, xs.length - keep))
+  const dropped = new Set([
+    ...oldest(
+      list.filter(a => a.endedAt === null),
+      MAX_RUNNING,
+    ),
+    ...oldest(
+      list.filter(a => a.endedAt !== null),
+      MAX_FINISHED,
+    ),
+  ])
+  return list.filter(a => !dropped.has(a))
+}
+
+/** The agent `id` finished at `now`: it moves to the history. */
+export function finishAgent(list: Agent[], id: string, now: number): Agent[] {
+  return keepAgents(list.map(a => (a.id === id && a.endedAt === null ? { ...a, endedAt: now, lastTool: '' } : a)))
 }

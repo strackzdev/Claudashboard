@@ -14,6 +14,7 @@ export const DEFAULT_EXPLORER: Explorer = {
   onlyTouched: false,
   preview: null,
   error: null,
+  finder: null,
 }
 
 /** The largest file the preview reads, and the most lines it keeps. */
@@ -104,6 +105,7 @@ export type Effect =
   | { kind: 'mention'; path: string }
   | { kind: 'reload' }
   | { kind: 'diff' }
+  | { kind: 'find' }
   | null
 
 export type Key = { key: string; ctrl?: true; meta?: true; shift?: true }
@@ -115,6 +117,8 @@ export type Key = { key: string; ctrl?: true; meta?: true; shift?: true }
 export function reduceKey(ex: Explorer, k: Key, room: number): { ex: Explorer; effect: Effect } {
   const page = Math.max(1, room - 1)
   const key = k.key
+  const isFind = (key === 'f' && !k.ctrl && !k.meta) || (key === 'p' && k.ctrl === true)
+  if (isFind && !ex.isFiltering) return { ex, effect: { kind: 'find' } }
 
   if (ex.preview?.diff) {
     const p = ex.preview

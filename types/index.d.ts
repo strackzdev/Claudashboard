@@ -101,9 +101,28 @@ export type Explorer = {
   error: string | null
   /** The repository holding the folder on screen, or null outside git. */
   repo?: RepoInfo | null
+  /** The fuzzy file finder (`f`), while it is open. */
+  finder?: Finder | null
 }
 
-/** A running subagent; it leaves the list when its turn completes. */
+/** The fuzzy file finder: what is typed, the picked result, and every file under the root it searches. */
+export type Finder = {
+  query: string
+  cursor: number
+  /** Paths from the root, '/'-separated: git's files (tracked and untracked, not ignored), or a walk outside git. */
+  files: string[]
+  isLoading: boolean
+}
+
+/** Which tab the body shows, the help overlay over it, and how far each scrolls. */
+export type View = {
+  tab: 'files' | 'agents'
+  help: boolean
+  helpTop: number
+  agentsTop: number
+}
+
+/** A subagent: running until its turn completes, then kept in the finished history. */
 export type Agent = {
   id: string
   name: string
@@ -117,6 +136,8 @@ export type Agent = {
   tools: number
   lastTool: string
   isBackground: boolean
+  /** When its turn completed; null while it runs. */
+  endedAt: number | null
 }
 
 declare module 'claude-code' {
@@ -127,7 +148,9 @@ declare module 'claude-code' {
       touched: Record<string, number>
       /** What Claude (or a subagent) does with each file this turn, by its path from the root; cleared when the turn ends. */
       activity: Record<string, Activity>
+      /** Running agents and the most recent finished ones, oldest first. */
       agents: Agent[]
+      view: View
       /** Bumped when git data for the open file arrives, so the pane redraws its gutter. */
       gitTick: number
     }

@@ -3,17 +3,22 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { Agent, Entry } from '../types'
 import { contextLevel, pushTurn, usageToVitals } from './session/vitals'
-import { describeTool, normalizeAgent, stepAgent } from './agents/agents'
+import { describeTool, finishAgent, keepAgents, normalizeAgent, stepAgent } from './agents/agents'
+import { agentLines, reduceAgentsKey } from './agents/view'
+import { helpLines, reduceHelp } from './help'
+import { findFiles, reduceFinder } from './explorer/finder'
 import { editMessage, enterEdit, leaveEdit, saveFile } from './explorer/editor/editing'
 import type { UiMessage } from './explorer/client'
 import { DEFAULT_EXPLORER, reduceKey, selectLine, visibleEntries } from './explorer/model'
-import { loadDir, loadPreview, noteEdit, openDiff, poll } from './explorer/files'
+import { loadDir, loadPreview, noteEdit, openDiff, openFinder, openFound, poll } from './explorer/files'
 import { refreshGit } from './explorer/git/git'
 import { ONE_DARK, THEME, registerPane } from './pane'
 import { isAbsolute, parentOf, relTo, toSlash } from './shared/paths'
 import {
   PANE,
+  getAgents,
   getExplorer,
+  getView,
   getVitals,
   logged,
   updateActivity,
@@ -25,6 +30,7 @@ import {
   updateAgents,
   updateExplorer,
   updateTouched,
+  updateView,
   updateVitals,
 } from './state'
 
@@ -129,7 +135,7 @@ async function noteSpawn(
     startedAt: await $.clock.now(),
     isBackground: e.background === true,
   })
-  await updateAgents($, list => [...list.filter(a => a.id !== agent.id), agent].slice(-24))
+  await updateAgents($, list => keepAgents([...list.filter(a => a.id !== agent.id), agent]))
 }
 
 const COMMANDS = ['claudashboard', 'cdb'] as const
@@ -143,8 +149,8 @@ export const register: Register = (on, options) => {
     for (const name of COMMANDS) {
       await $.command.register({
         name,
-        description: 'Claudashboard: open or close the hub, jump the explorer to a folder, show the turns row, or reset it',
-        argumentHint: '[close|cd <path>|save|reset|turns [on|off]]',
+        description: 'Claudashboard: open or close the hub, show a tab, jump the explorer to a folder, show the turns row, or reset it',
+        argumentHint: '[close|files|agents|cd <path>|save|reset|turns [on|off]]',
       })
     }
     await Promise.all([refreshUsage($), refreshModel($)]).catch(logged($, 'session vitals'))
@@ -189,6 +195,11 @@ export const register: Register = (on, options) => {
         await updateVitals($, v => ({ ...v, showTurns }))
         await $.store.set('showTurns', showTurns).catch(logged($, 'showTurns'))
         return { text: showTurns ? 'Claudashboard: turns row on (cost and length of the last turns).' : 'Claudashboard: turns row off.' }
+      }
+      if (verb === 'files' || verb === 'agents') {
+        await updateView($, v => ({ ...v, tab: verb, help: false }))
+        await openPane($)
+        return { text: `Claudashboard: ${verb} tab.` }
       }
       if (verb === 'reset') {
         await updateTouched($, () => ({}))
@@ -274,9 +285,10 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     if (e.agentId) {
-      // A finished agent leaves the list.
+      // A finished agent moves to the history.
       const id = e.agentId
-      await updateAgents($, list => list.filter(a => a.id !== id)).catch(logged($, 'agent done'))
+      const now = await $.clock.now()
+      await updateAgents($, list => finishAgent(list, id, now)).catch(logged($, 'agent done'))
       return done
     }
     void refreshGit($).catch(logged($, 'refreshGit'))
@@ -332,6 +344,50 @@ export const register: Register = (on, options) => {
     const d = e.data as UiMessage
     const room = Math.max(3, Number(d.room) || 10)
     const ex = await getExplorer($)
+    const view = await getView($)
+    const k = d.k === 'key' && typeof d.key === 'string' ? toKey(d) : null
+    if (d.k === 'tab') {
+      await updateView($, v => ({ ...v, tab: d.tab === 'agents' ? 'agents' : 'files', help: false }))
+      return {}
+    }
+    // The help sits over either tab: arrows scroll it, any other key or a click on its title closes it.
+    if (view.help) {
+      if (k) await updateView($, v => reduceHelp(v, k, helpLines('list').length, room))
+      else if (d.k === 'crumb') await updateView($, v => ({ ...v, help: false, helpTop: 0 }))
+      return {}
+    }
+    // Tab switches tabs, except where it types: editing, or finishing a filter.
+    const isTyping = ex.preview?.mode === 'edit' || ex.isFiltering
+    if (k?.key === 'tab' && !k.ctrl && (view.tab === 'agents' || !isTyping)) {
+      await updateView($, v => ({ ...v, tab: v.tab === 'agents' ? 'files' : 'agents' }))
+      return {}
+    }
+    if (k?.key === '?' && (view.tab === 'agents' || (!isTyping && !ex.finder))) {
+      await updateView($, v => ({ ...v, help: true, helpTop: 0 }))
+      return {}
+    }
+    if (view.tab === 'agents') {
+      if (!k) return {}
+      const agents = await getAgents($)
+      const r = reduceAgentsKey(view, k, agentLines(agents).length, room)
+      if (r.view !== view) await updateView($, () => r.view)
+      if (r.effect?.kind === 'clear') await updateAgents($, list => list.filter(a => a.endedAt === null))
+      return {}
+    }
+    if (ex.finder) {
+      const f = ex.finder
+      if (d.k === 'crumb') await updateExplorer($, x => ({ ...x, finder: null }))
+      if (d.k === 'pick' && typeof d.index === 'number') {
+        const picked = findFiles(f.files, f.query)[d.index]
+        if (picked) await openFound($, picked.path)
+      }
+      if (!k) return {}
+      const r = reduceFinder(f, k, room)
+      if (r.finder !== f) await updateExplorer($, x => ({ ...x, finder: r.finder }))
+      if (r.effect?.kind === 'open') await openFound($, r.effect.path)
+      else if (r.effect?.kind === 'close') await updateExplorer($, x => ({ ...x, finder: null }))
+      return {}
+    }
     if (ex.preview?.mode === 'edit') {
       await editMessage($, ex.preview, d, room)
       return {}
@@ -366,6 +422,8 @@ export const register: Register = (on, options) => {
     else if (effect?.kind === 'up') await goUp($)
     else if (effect?.kind === 'mention') await mention($, effect.path)
     else if (effect?.kind === 'diff') await openDiff($)
+    // The listing can take a while in a large tree: the finder opens at once and fills in when it is done.
+    else if (effect?.kind === 'find') void openFinder($).catch(logged($, 'finder'))
     else if (effect?.kind === 'reload') await (nextEx.preview ? refreshGit($) : loadDir($, nextEx.dir))
     return {}
   })

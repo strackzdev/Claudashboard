@@ -1,15 +1,20 @@
 // Pure logic for Claudashboard: the props the explorer client draws, from the stored state. No `$` here, so it is testable.
-import type { Activity, Entry, Explorer } from '../../types'
+import type { Activity, Agent, Entry, Explorer, View } from '../../types'
 import { displayOf, visualCol } from './editor/editor'
 import type { ExplorerProps, GutterMark, Hint, Palette } from './client'
 import { MAX_DRAWN, selRange, visibleEntries, windowTop } from './model'
-import { clipEnd, fmtAge, fmtSize } from '../shared/format'
+import { MAX_RESULTS, findFiles } from './finder'
+import { agentLines } from '../agents/view'
+import { helpLines } from '../help'
+import { clamp, clipEnd, fmtAge, fmtSize } from '../shared/format'
 import type { Base } from './git/git'
 import type { LineMark } from './git/gitdiff'
 import { lineMarks, statusLetter } from './git/gitdiff'
 import { fitHeader } from './header'
 import { markdownWindow } from './media/media'
 import { baseName } from '../shared/paths'
+
+const HELP: Hint = { key: '?', label: 'help' }
 
 /** One gutter cell: a bar for an added or modified line, a low bar where lines were deleted. */
 function gutterMark(m: LineMark): GutterMark | null {
@@ -61,23 +66,16 @@ export function explorerProps(o: {
           { key: 'ctrl+s', label: 'save' },
           { key: 'ctrl+e', label: 'view' },
           { key: 'ctrl+z', label: 'undo' },
-          { key: 'click', label: 'place cursor' },
         ]
       : p.kind === 'image'
-        ? [
-            { key: '@', label: 'mention' },
-            { key: '⌫', label: 'back' },
-          ]
+        ? [{ key: '@', label: 'mention' }, { key: '⌫', label: 'back' }, HELP]
         : [
             ...(p.readOnly ? [] : [{ key: 'e', label: 'edit' }]),
             { key: 'd', label: 'diff' },
             ...(p.kind === 'markdown' ? [{ key: 'm', label: p.mdView === 'source' ? 'rendered' : 'source' }] : []),
-            { key: '↑↓', label: 'scroll' },
-            { key: 'PgUp/Dn', label: 'page' },
-            { key: 'g/G', label: 'top/end' },
             { key: '@', label: p.sel ? `mention ${selRange(p.sel)[0] + 1}–${selRange(p.sel)[1] + 1}` : 'mention' },
-            { key: 'click', label: p.sel ? 'clear' : 'pick lines' },
             { key: '⌫', label: 'back' },
+            HELP,
           ]
     const isRendered = !isEdit && p.kind === 'markdown' && p.mdView !== 'source'
     // The git gutter: every line's layer and change, for the lines in view.
@@ -147,12 +145,7 @@ export function explorerProps(o: {
         ...props,
         crumbs: [rootName, ...p.path.split('/').slice(0, -1), `${baseName(p.path)} · diff`],
         counter: `${p.top + 1}–${dEnd} / ${rows.length}`,
-        hints: [
-          { key: '↑↓', label: 'scroll' },
-          { key: 'PgUp/Dn', label: 'page' },
-          { key: 'd', label: 'back to file' },
-          { key: '@', label: 'mention' },
-        ],
+        hints: [{ key: 'd', label: 'back to file' }, { key: '@', label: 'mention' }, HELP],
         code: null,
         markdown: null,
         gutter: null,
@@ -179,12 +172,10 @@ export function explorerProps(o: {
         ]
       : [
           { key: '⏎', label: 'open' },
-          { key: 'e', label: 'edit' },
-          { key: '⌫', label: 'back' },
+          { key: 'f', label: 'find' },
           { key: '/', label: 'filter' },
-          { key: '.', label: ex.showHidden ? 'hide dotfiles' : 'dotfiles' },
           { key: 't', label: touchedN ? `touched (${touchedN})` : 'touched' },
-          { key: '@', label: 'mention' },
+          HELP,
         ]
     props = {
       mode: 'list',
@@ -238,4 +229,127 @@ export function explorerProps(o: {
   const header = fitHeader({ width: inner, crumbs: props.crumbs, filter: props.filter, mode: props.fileMode, isDirty: props.isDirty })
   props = { ...props, crumbs: header.crumbs, label: header.label, labelHint: header.hint, dirtyMark: header.dirty }
   return props
+}
+
+/** What a body other than the files draws in none of the files' places. */
+const BLANK: Pick<
+  ExplorerProps,
+  | 'mode'
+  | 'filter'
+  | 'rows'
+  | 'top'
+  | 'code'
+  | 'note'
+  | 'empty'
+  | 'fileMode'
+  | 'readOnly'
+  | 'isDirty'
+  | 'label'
+  | 'labelHint'
+  | 'dirtyMark'
+  | 'gutter'
+  | 'changes'
+  | 'markdown'
+  | 'edit'
+  | 'selection'
+  | 'diff'
+> = {
+  mode: 'list',
+  filter: null,
+  rows: [],
+  top: 0,
+  code: null,
+  note: null,
+  empty: null,
+  fileMode: null,
+  readOnly: null,
+  isDirty: false,
+  label: null,
+  labelHint: null,
+  dirtyMark: null,
+  gutter: null,
+  changes: null,
+  markdown: null,
+  edit: null,
+  selection: null,
+  diff: null,
+}
+
+/** A window of `room` lines from `top`, and the counter beside it when the lines run past the room. */
+function windowOf<T>(lines: T[], top: number, room: number): { lines: T[]; top: number; counter: string } {
+  const at = clamp(top, 0, Math.max(0, lines.length - room))
+  const end = Math.min(lines.length, at + room)
+  return { lines: lines.slice(at, end), top: at, counter: lines.length > room ? `${at + 1}–${end} / ${lines.length}` : '' }
+}
+
+/**
+ * The body's props: the tab bar over the files, the agents tab, the finder or the help, whichever shows.
+ * `view` is the tab and the help; `agents` every agent, running and finished.
+ */
+export function bodyProps(o: Parameters<typeof explorerProps>[0] & { view: View; agents: Agent[] }): ExplorerProps {
+  const { ex, view, room } = o
+  const running = o.agents.filter(a => a.endedAt === null).length
+  const finished = o.agents.length - running
+  const r = ex.repo ?? null
+  const shared = {
+    body: 'files' as const,
+    tab: view.tab,
+    running,
+    now: o.now,
+    repo: r ? { name: r.name, branch: r.branch, ahead: r.ahead, behind: r.behind, changed: r.changed, staged: r.staged } : null,
+  }
+  const files: ExplorerProps = { ...explorerProps(o), ...shared }
+
+  if (view.help) {
+    const ctx = view.tab === 'agents' ? 'agents' : ex.preview?.diff ? 'diff' : ex.preview ? 'file' : 'list'
+    const w = windowOf(helpLines(ctx), view.helpTop, room)
+    return {
+      ...files,
+      ...BLANK,
+      body: 'help',
+      crumbs: ['help'],
+      counter: w.counter,
+      hints: [
+        { key: '↑↓', label: 'scroll' },
+        { key: 'any key', label: 'close' },
+      ],
+      help: w.lines,
+    }
+  }
+  if (view.tab === 'agents') {
+    const w = windowOf(agentLines(o.agents), view.agentsTop, room)
+    return {
+      ...files,
+      ...BLANK,
+      body: 'agents',
+      crumbs: ['agents'],
+      counter: w.counter || `${running} running · ${finished} finished`,
+      hints: [...(finished ? [{ key: 'c', label: 'clear finished' }] : []), { key: 'Tab', label: 'files' }, HELP],
+      agents: w.lines,
+    }
+  }
+  if (ex.finder) {
+    const f = ex.finder
+    const found = findFiles(f.files, f.query)
+    const cursor = clamp(f.cursor, 0, Math.max(0, found.length - 1))
+    const top = windowTop(cursor, found.length, room)
+    const isListing = f.isLoading && f.files.length === 0
+    return {
+      ...files,
+      ...BLANK,
+      body: 'finder',
+      crumbs: ['find'],
+      filter: `${f.query}▏`,
+      counter: isListing ? '' : `${found.length ? cursor + 1 : 0}/${found.length}${found.length === MAX_RESULTS ? '+' : ''}`,
+      top,
+      empty: isListing ? 'Listing the files…' : found.length ? null : 'No file matches.',
+      hints: [
+        { key: 'type', label: 'to search' },
+        { key: '⏎', label: 'open' },
+        { key: '⌫', label: 'close' },
+      ],
+      found: found.slice(top, top + room).map((m, i) => ({ path: m.path, hits: m.hits, isSelected: top + i === cursor })),
+    }
+  }
+  return files
 }

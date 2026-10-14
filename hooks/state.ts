@@ -1,7 +1,7 @@
 // The hub's stored state and the small helpers every module reads and writes it through.
 import type { EngineInterface } from 'claude-code'
 import { atom, read, update } from 'claude-code'
-import type { Activity, Agent, Explorer, Preview, Vitals } from '../types'
+import type { Activity, Agent, Explorer, Preview, View, Vitals } from '../types'
 import { normalizeAgent } from './agents/agents'
 import { DEFAULT_EXPLORER, emptyPreview } from './explorer/model'
 import { DEFAULT_VITALS } from './session/vitals'
@@ -16,6 +16,8 @@ const explorer = atom({ plugin: 'claudashboard', key: 'explorer' } as const, DEF
 const touched = atom({ plugin: 'claudashboard', key: 'touched' } as const, {})
 const agents = atom({ plugin: 'claudashboard', key: 'agents' } as const, [] as Agent[])
 const gitTick = atom({ plugin: 'claudashboard', key: 'gitTick' } as const, 0)
+export const DEFAULT_VIEW: View = { tab: 'files', help: false, helpTop: 0, agentsTop: 0 }
+const view = atom({ plugin: 'claudashboard', key: 'view' } as const, DEFAULT_VIEW)
 const activity = atom({ plugin: 'claudashboard', key: 'activity' } as const, {} as Record<string, Activity>)
 
 export async function getVitals($: EngineInterface): Promise<Vitals> {
@@ -68,7 +70,7 @@ export function setExplorer($: EngineInterface, ex: Explorer) {
   return update($, explorer, () => ex)
 }
 export function updateAgents($: EngineInterface, fn: (list: Agent[]) => Agent[]) {
-  return update($, agents, list => fn(list ?? []))
+  return update($, agents, list => fn((list ?? []).map(a => normalizeAgent(a))))
 }
 export function updateTouched($: EngineInterface, fn: (t: Record<string, number>) => Record<string, number>) {
   return update($, touched, t => fn(t ?? {}))
@@ -78,6 +80,12 @@ export async function getActivity($: EngineInterface): Promise<Record<string, Ac
 }
 export function updateActivity($: EngineInterface, fn: (a: Record<string, Activity>) => Record<string, Activity>) {
   return update($, activity, a => fn(a ?? {}))
+}
+export async function getView($: EngineInterface): Promise<View> {
+  return normalize(DEFAULT_VIEW, await read($, view))
+}
+export function updateView($: EngineInterface, fn: (v: View) => View) {
+  return update($, view, v => fn(normalize(DEFAULT_VIEW, v)))
 }
 /** The gutter's base changed: redraw the pane, which reads the tick. */
 export function bumpGitTick($: EngineInterface) {
